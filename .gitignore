@@ -1,0 +1,33 @@
+# Build artifacts
+build/
+*.tar
+*.tar.gz
+*.log
+
+# Reports
+*-report.json
+.scannerwork/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+*.egg-info/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary
+tmp/
+temp/
+*.tmp
