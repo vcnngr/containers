@@ -1,0 +1,538 @@
+#!/usr/bin/env groovy
+/**
+ * VCNNGR Apache Pipeline
+ * 
+ * Build Apache HTTP Server container with:
+ * - Code quality checks (Shellcheck, SonarQube)
+ * - Security scanning (Trivy)
+ * - Multi-arch support
+ * - Automated tagging and push
+ * 
+ * Based on Bitnami Apache with Vcnngr enhancements
+ */
+
+pipeline {
+    agent {
+        kubernetes {
+            namespace 'jenkins'
+            yaml '''
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    jenkins: agent
+    container: apache
+spec:
+  serviceAccountName: jenkins
+  containers:
+  - name: buildah
+    image: quay.io/buildah/stable:latest
+    command: [cat]
+    tty: true
+    securityContext:
+      privileged: true
+    volumeMounts:
+    - name: varlibcontainers
+      mountPath: /var/lib/containers
+  - name: shellcheck
+    image: koalaman/shellcheck-alpine:latest
+    command: [cat]
+    tty: true
+  - name: sonar-scanner
+    image: sonarsource/sonar-scanner-cli:latest
+    command: [cat]
+    tty: true
+  - name: trivy
+    image: aquasec/trivy:latest
+    command: [cat]
+    tty: true
+    volumeMounts:
+    - name: varlibcontainers
+      mountPath: /var/lib/containers
+  volumes:
+  - name: varlibcontainers
+    emptyDir: {}
+'''
+        }
+    }
+    
+    parameters {
+        string(
+            name: 'APACHE_VERSION', 
+            defaultValue: '2.4.65', 
+            description: 'Apache version to build'
+        )
+        string(
+            name: 'IMAGE_REVISION', 
+            defaultValue: '0', 
+            description: 'Image revision number'
+        )
+        choice(
+            name: 'DEBIAN_VARIANT', 
+            choices: ['debian-12', 'debian-11'], 
+            description: 'Debian variant'
+        )
+        choice(
+            name: 'BUILD_ARCH', 
+            choices: ['amd64', 'arm64', 'multi-arch'], 
+            description: 'Target architecture'
+        )
+        booleanParam(
+            name: 'PUSH_TO_DOCKERHUB', 
+            defaultValue: true, 
+            description: 'Push image to DockerHub'
+        )
+        booleanParam(
+            name: 'RUN_SECURITY_SCAN', 
+            defaultValue: true, 
+            description: 'Run Trivy security scan'
+        )
+        booleanParam(
+            name: 'RUN_CODE_QUALITY', 
+            defaultValue: true, 
+            description: 'Run code quality checks (Shellcheck, SonarQube)'
+        )
+        booleanParam(
+            name: 'TAG_AS_LATEST', 
+            defaultValue: false, 
+            description: 'Also tag as :latest'
+        )
+    }
+    
+    environment {
+        // Container configuration
+        CONTAINER_NAME = 'apache'
+        MAJOR_VERSION = sh(script: "echo '${params.APACHE_VERSION}' | cut -d. -f1-2", returnStdout: true).trim()
+        
+        // Registry configuration
+        DOCKERHUB_REGISTRY = 'docker.io'
+        DOCKERHUB_NAMESPACE = 'vcnngr'
+        IMAGE_BASE = "${DOCKERHUB_REGISTRY}/${DOCKERHUB_NAMESPACE}/${CONTAINER_NAME}"
+        
+        // Tags
+        TAG_FULL = "${params.APACHE_VERSION}-${params.IMAGE_REVISION}"
+        TAG_VERSION = "${params.APACHE_VERSION}"
+        TAG_MAJOR = "${MAJOR_VERSION}"
+        
+        // Credentials
+        DOCKERHUB_CREDS = credentials('dockerhub-vcnngr')
+        SONAR_TOKEN = credentials('sonarqube-token')
+        
+        // Build paths
+        BUILD_CONTEXT = "${WORKSPACE}/${CONTAINER_NAME}/${MAJOR_VERSION}/${params.DEBIAN_VARIANT}"
+        DOCKERFILE = "${BUILD_CONTEXT}/Dockerfile"
+        
+        // Build info
+        BUILD_DATE = sh(script: "date -u +'%Y-%m-%dT%H:%M:%SZ'", returnStdout: true).trim()
+        GIT_COMMIT = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
+        GIT_COMMIT_SHORT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+    }
+    
+    options {
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+        timeout(time: 2, unit: 'HOURS')
+        timestamps()
+        ansiColor('xterm')
+    }
+    
+    stages {
+        stage('📋 Validate') {
+            steps {
+                script {
+                    echo """
+╔═══════════════════════════════════════════════════════════════╗
+║              VCNNGR APACHE BUILD PIPELINE                     ║
+║              Bitnami Skills, Vcnngr Style                     ║
+╚═══════════════════════════════════════════════════════════════╝
+
+📦 Container:     ${CONTAINER_NAME}
+🏷️  Version:       ${params.APACHE_VERSION}
+📝 Revision:      ${params.IMAGE_REVISION}
+🐧 Debian:        ${params.DEBIAN_VARIANT}
+🏗️  Architecture: ${params.BUILD_ARCH}
+📅 Build Date:    ${BUILD_DATE}
+🔗 Git Commit:    ${GIT_COMMIT_SHORT}
+
+🏷️  Tags to build:
+   • ${IMAGE_BASE}:${TAG_FULL}
+   • ${IMAGE_BASE}:${TAG_VERSION}
+   • ${IMAGE_BASE}:${TAG_MAJOR}
+${params.TAG_AS_LATEST ? "   • ${IMAGE_BASE}:latest" : ""}
+
+═══════════════════════════════════════════════════════════════
+"""
+                    
+                    // Validate paths
+                    sh """
+                        if [ ! -f "${DOCKERFILE}" ]; then
+                            echo "❌ Dockerfile not found: ${DOCKERFILE}"
+                            exit 1
+                        fi
+                        echo "✅ Dockerfile found"
+                        
+                        if [ ! -d "${BUILD_CONTEXT}/prebuildfs" ]; then
+                            echo "⚠️  Warning: prebuildfs directory not found"
+                        else
+                            echo "✅ prebuildfs directory exists"
+                        fi
+                        
+                        if [ ! -d "${BUILD_CONTEXT}/rootfs" ]; then
+                            echo "⚠️  Warning: rootfs directory not found"
+                        else
+                            echo "✅ rootfs directory exists"
+                        fi
+                    """
+                }
+            }
+        }
+        
+        stage('🔍 Code Quality') {
+            when {
+                expression { params.RUN_CODE_QUALITY }
+            }
+            parallel {
+                stage('Shellcheck') {
+                    steps {
+                        container('shellcheck') {
+                            script {
+                                echo "🔍 Running Shellcheck on shell scripts"
+                                
+                                try {
+                                    sh """
+                                        cd ${BUILD_CONTEXT}
+                                        
+                                        # Find all shell scripts
+                                        SCRIPTS=\$(find . -type f -name '*.sh' 2>/dev/null || true)
+                                        
+                                        if [ -z "\$SCRIPTS" ]; then
+                                            echo "No shell scripts found to check"
+                                            exit 0
+                                        fi
+                                        
+                                        echo "Found shell scripts:"
+                                        echo "\$SCRIPTS" | while read script; do
+                                            echo "  - \$script"
+                                        done
+                                        
+                                        # Run shellcheck
+                                        echo "\$SCRIPTS" | xargs shellcheck -f gcc --severity=warning || {
+                                            echo "⚠️  Shellcheck found issues (continuing build)"
+                                            exit 0
+                                        }
+                                        
+                                        echo "✅ Shellcheck passed"
+                                    """
+                                } catch (Exception e) {
+                                    echo "⚠️  Shellcheck failed but continuing: ${e.message}"
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                stage('SonarQube') {
+                    steps {
+                        container('sonar-scanner') {
+                            script {
+                                echo "📊 Running SonarQube analysis"
+                                
+                                try {
+                                    sh """
+                                        cd ${BUILD_CONTEXT}
+                                        
+                                        sonar-scanner \
+                                            -Dsonar.host.url=http://sonarqube-sonarqube.jenkins.svc.cluster.local:9000 \
+                                            -Dsonar.token=${SONAR_TOKEN} \
+                                            -Dsonar.projectKey=vcnngr-${CONTAINER_NAME} \
+                                            -Dsonar.projectName='VCNNGR ${CONTAINER_NAME}' \
+                                            -Dsonar.projectVersion=${params.APACHE_VERSION} \
+                                            -Dsonar.sources=. \
+                                            -Dsonar.exclusions='**/*.md' \
+                                            -Dsonar.sourceEncoding=UTF-8 \
+                                            -Dsonar.scm.disabled=true
+                                        
+                                        echo "✅ SonarQube scan completed"
+                                    """
+                                } catch (Exception e) {
+                                    echo "⚠️  SonarQube scan failed but continuing: ${e.message}"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        stage('🏗️  Build Image') {
+            steps {
+                container('buildah') {
+                    script {
+                        echo "🏗️  Building Apache ${params.APACHE_VERSION} for ${params.BUILD_ARCH}"
+                        
+                        def targetArch = params.BUILD_ARCH == 'multi-arch' ? 'amd64' : params.BUILD_ARCH
+                        
+                        sh """
+                            cd ${BUILD_CONTEXT}
+                            
+                            # Build with buildah
+                            buildah bud \
+                                --format docker \
+                                --build-arg TARGETARCH=${targetArch} \
+                                --build-arg DOWNLOADS_URL=downloads.bitnami.com/files/stacksmith \
+                                --layers \
+                                --tag ${IMAGE_BASE}:${TAG_FULL} \
+                                --tag ${IMAGE_BASE}:${TAG_VERSION} \
+                                --tag ${IMAGE_BASE}:${TAG_MAJOR} \
+                                ${params.TAG_AS_LATEST ? "--tag ${IMAGE_BASE}:latest" : ""} \
+                                --label "org.opencontainers.image.created=${BUILD_DATE}" \
+                                --label "org.opencontainers.image.revision=${GIT_COMMIT}" \
+                                --label "org.opencontainers.image.version=${params.APACHE_VERSION}" \
+                                --label "org.opencontainers.image.vendor=Vcnngr" \
+                                --label "org.opencontainers.image.title=vcnngr/apache" \
+                                --label "org.opencontainers.image.description=Apache HTTP Server - Bitnami Skills, Vcnngr Style" \
+                                -f Dockerfile \
+                                .
+                            
+                            echo "✅ Image built successfully"
+                            buildah images | grep ${CONTAINER_NAME}
+                        """
+                    }
+                }
+            }
+        }
+        
+        stage('🧪 Test Image') {
+            steps {
+                container('buildah') {
+                    script {
+                        echo "🧪 Running container tests"
+                        
+                        sh """
+                            # Inspect image
+                            echo "📋 Image Metadata:"
+                            buildah inspect ${IMAGE_BASE}:${TAG_FULL} | jq '.OCIv1.config.Labels'
+                            
+                            # Verify user
+                            echo ""
+                            echo "👤 Checking user configuration..."
+                            USER_ID=\$(buildah inspect ${IMAGE_BASE}:${TAG_FULL} | jq -r '.OCIv1.config.User // "root"')
+                            if [ "\$USER_ID" = "1001" ]; then
+                                echo "✅ Image correctly runs as non-root user 1001"
+                            else
+                                echo "❌ WARNING: Image runs as \$USER_ID (expected 1001)"
+                                exit 1
+                            fi
+                            
+                            # Verify exposed ports
+                            echo ""
+                            echo "🌐 Checking exposed ports..."
+                            buildah inspect ${IMAGE_BASE}:${TAG_FULL} | jq -r '.OCIv1.config.ExposedPorts | keys[]' || echo "No ports exposed"
+                            
+                            # Verify entrypoint
+                            echo ""
+                            echo "🚀 Entrypoint and CMD:"
+                            buildah inspect ${IMAGE_BASE}:${TAG_FULL} | jq -r '.OCIv1.config.Entrypoint'
+                            buildah inspect ${IMAGE_BASE}:${TAG_FULL} | jq -r '.OCIv1.config.Cmd'
+                            
+                            # Check image size
+                            echo ""
+                            echo "💾 Image size:"
+                            buildah images ${IMAGE_BASE}:${TAG_FULL}
+                        """
+                    }
+                }
+            }
+        }
+        
+        stage('🔒 Security Scan') {
+            when {
+                expression { params.RUN_SECURITY_SCAN }
+            }
+            steps {
+                container('trivy') {
+                    script {
+                        echo "🔒 Running Trivy security scan"
+                        
+                        def maxRetries = 3
+                        def success = false
+                        
+                        for (int attempt = 1; attempt <= maxRetries; attempt++) {
+                            try {
+                                if (attempt > 1) {
+                                    echo "Retry attempt ${attempt}/${maxRetries} - Cleaning Trivy cache..."
+                                    sh "trivy clean --all || true"
+                                    sleep(time: 5, unit: 'SECONDS')
+                                }
+                                
+                                sh """
+                                    echo "🔍 Scanning for vulnerabilities..."
+                                    trivy image \
+                                        --severity HIGH,CRITICAL \
+                                        --exit-code 0 \
+                                        --timeout 10m \
+                                        --format table \
+                                        ${IMAGE_BASE}:${TAG_FULL}
+                                    
+                                    # Generate JSON report
+                                    trivy image \
+                                        --severity HIGH,CRITICAL \
+                                        --format json \
+                                        --output trivy-report-apache.json \
+                                        ${IMAGE_BASE}:${TAG_FULL}
+                                    
+                                    # Summary
+                                    echo ""
+                                    echo "📊 Vulnerability Summary:"
+                                    cat trivy-report-apache.json | jq '[.Results[].Vulnerabilities[]? | select(.Severity == "HIGH" or .Severity == "CRITICAL")] | group_by(.Severity) | map({Severity: .[0].Severity, Count: length})'
+                                """
+                                
+                                success = true
+                                break
+                                
+                            } catch (Exception e) {
+                                echo "⚠️  Trivy scan attempt ${attempt} failed: ${e.message}"
+                                if (attempt == maxRetries) {
+                                    echo "ERROR: All ${maxRetries} attempts failed, but continuing..."
+                                }
+                            }
+                        }
+                        
+                        archiveArtifacts artifacts: 'trivy-report-apache.json', allowEmptyArchive: true
+                    }
+                }
+            }
+        }
+        
+        stage('📤 Push to DockerHub') {
+            when {
+                expression { params.PUSH_TO_DOCKERHUB }
+            }
+            steps {
+                container('buildah') {
+                    script {
+                        echo "📤 Pushing images to DockerHub"
+                        
+                        sh """
+                            # Login to DockerHub
+                            echo "${DOCKERHUB_CREDS_PSW}" | buildah login \
+                                --username "${DOCKERHUB_CREDS_USR}" \
+                                --password-stdin \
+                                ${DOCKERHUB_REGISTRY}
+                            
+                            # Push all tags
+                            echo "Pushing ${IMAGE_BASE}:${TAG_FULL}..."
+                            buildah push ${IMAGE_BASE}:${TAG_FULL}
+                            
+                            echo "Pushing ${IMAGE_BASE}:${TAG_VERSION}..."
+                            buildah push ${IMAGE_BASE}:${TAG_VERSION}
+                            
+                            echo "Pushing ${IMAGE_BASE}:${TAG_MAJOR}..."
+                            buildah push ${IMAGE_BASE}:${TAG_MAJOR}
+                            
+                            ${params.TAG_AS_LATEST ? """
+                            echo "Pushing ${IMAGE_BASE}:latest..."
+                            buildah push ${IMAGE_BASE}:latest
+                            """ : ""}
+                            
+                            echo "✅ All images pushed successfully"
+                        """
+                    }
+                }
+            }
+        }
+        
+        stage('📝 Generate Report') {
+            steps {
+                script {
+                    def metadata = [
+                        container: CONTAINER_NAME,
+                        version: params.APACHE_VERSION,
+                        revision: params.IMAGE_REVISION,
+                        debian_variant: params.DEBIAN_VARIANT,
+                        architecture: params.BUILD_ARCH,
+                        tags: [
+                            "${IMAGE_BASE}:${TAG_FULL}",
+                            "${IMAGE_BASE}:${TAG_VERSION}",
+                            "${IMAGE_BASE}:${TAG_MAJOR}"
+                        ],
+                        build_date: BUILD_DATE,
+                        git_commit: GIT_COMMIT,
+                        jenkins_build: env.BUILD_NUMBER,
+                        jenkins_url: env.BUILD_URL,
+                        sonarqube_url: "http://sonarqube-sonarqube.jenkins.svc.cluster.local:9000/dashboard?id=vcnngr-${CONTAINER_NAME}"
+                    ]
+                    
+                    if (params.TAG_AS_LATEST) {
+                        metadata.tags.add("${IMAGE_BASE}:latest")
+                    }
+                    
+                    writeJSON file: 'build-metadata-apache.json', json: metadata, pretty: 4
+                    archiveArtifacts artifacts: 'build-metadata-apache.json'
+                    
+                    echo """
+╔═══════════════════════════════════════════════════════════════╗
+║                    ✅ BUILD COMPLETE                          ║
+╚═══════════════════════════════════════════════════════════════╝
+
+📦 Container: ${CONTAINER_NAME}
+🏷️  Version: ${params.APACHE_VERSION}
+📝 Revision: ${params.IMAGE_REVISION}
+
+🐳 Images available:
+"""
+                    metadata.tags.each { tag ->
+                        echo "   • ${tag}"
+                    }
+                    
+                    echo """
+🚀 Quick test:
+   docker pull ${IMAGE_BASE}:${TAG_VERSION}
+   docker run -d -p 8080:8080 ${IMAGE_BASE}:${TAG_VERSION}
+   curl http://localhost:8080
+
+📊 Quality Reports:
+   SonarQube: ${metadata.sonarqube_url}
+
+═══════════════════════════════════════════════════════════════
+"""
+                }
+            }
+        }
+    }
+    
+    post {
+        always {
+            archiveArtifacts artifacts: '*.json', allowEmptyArchive: true
+            
+            container('buildah') {
+                sh """
+                    # Cleanup
+                    buildah logout ${DOCKERHUB_REGISTRY} || true
+                    buildah rm --all || true
+                """ 
+            }
+        }
+        
+        success {
+            echo """
+╔═══════════════════════════════════════════════════════════════╗
+║   ✅ PIPELINE SUCCESSFUL                                      ║
+╚═══════════════════════════════════════════════════════════════╝
+
+Images: https://hub.docker.com/r/vcnngr/apache
+SonarQube: http://sonarqube-sonarqube.jenkins.svc.cluster.local:9000/dashboard?id=vcnngr-apache
+"""
+        }
+        
+        failure {
+            echo """
+╔═══════════════════════════════════════════════════════════════╗
+║   ❌ PIPELINE FAILED                                          ║
+╚═══════════════════════════════════════════════════════════════╝
+
+Check console output for errors
+Review archived artifacts for details
+"""
+        }
+    }
+}
