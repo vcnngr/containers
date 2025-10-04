@@ -181,27 +181,36 @@ ${params.TAG_AS_LATEST ? "• ${IMAGE_BASE}:latest" : ""}
         stage('Build Image') {
             steps {
                 container('buildah') {
-                    sh """
-                        cd ${BUILD_CONTEXT}
+                    script {
+                        // Crea il file secret in modo sicuro
+                        writeFile file: '/tmp/downloads_url_secret', text: 'downloads.bitnami.com/files/stacksmith'
                         
-                        buildah bud \
-                            --format docker \
-                            --build-arg TARGETARCH=${params.BUILD_ARCH} \
-                            --build-arg DOWNLOADS_URL=downloads.bitnami.com/files/stacksmith \
-                            --layers \
-                            --tag ${IMAGE_BASE}:${TAG_FULL} \
-                            --tag ${IMAGE_BASE}:${TAG_VERSION} \
-                            --tag ${IMAGE_BASE}:${MAJOR_VERSION} \
-                            ${params.TAG_AS_LATEST ? "--tag ${IMAGE_BASE}:latest" : ""} \
-                            --label "org.opencontainers.image.created=${BUILD_DATE}" \
-                            --label "org.opencontainers.image.version=${params.APACHE_VERSION}" \
-                            --label "org.opencontainers.image.vendor=Vcnngr" \
-                            -f Dockerfile \
-                            .
+                        sh """
+                            cd ${BUILD_CONTEXT}
+                            
+                            buildah bud \
+                                --format docker \
+                                --build-arg TARGETARCH=${params.BUILD_ARCH} \
+                                --build-arg DOWNLOADS_URL=downloads.bitnami.com/files/stacksmith \
+                                --secret id=downloads_url,src=/tmp/downloads_url_secret \
+                                --layers \
+                                --tag ${IMAGE_BASE}:${TAG_FULL} \
+                                --tag ${IMAGE_BASE}:${TAG_VERSION} \
+                                --tag ${IMAGE_BASE}:${MAJOR_VERSION} \
+                                ${params.TAG_AS_LATEST ? "--tag ${IMAGE_BASE}:latest" : ""} \
+                                --label "org.opencontainers.image.created=${BUILD_DATE}" \
+                                --label "org.opencontainers.image.version=${params.APACHE_VERSION}" \
+                                --label "org.opencontainers.image.vendor=Vcnngr" \
+                                -f Dockerfile \
+                                .
+                            
+                            echo "✓ Image built successfully"
+                            buildah images | grep ${CONTAINER_NAME}
+                        """
                         
-                        echo "✓ Image built successfully"
-                        buildah images | grep ${CONTAINER_NAME}
-                    """
+                        // Cleanup
+                        sh "rm -f /tmp/downloads_url_secret"
+                    }
                 }
             }
         }
