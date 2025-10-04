@@ -220,25 +220,7 @@ ${params.TAG_AS_LATEST ? "• ${IMAGE_BASE}:latest" : ""}
                 }
             }
         }
-        
-        stage('Load and Tag Image') {
-            steps {
-                container('crane') {
-                    sh """
-                        # Carica l'immagine dal tar
-                        cd /workspace
-                        
-                        # Tag delle immagini
-                        crane tag ${IMAGE_BASE}:${TAG_FULL} ${TAG_VERSION}
-                        crane tag ${IMAGE_BASE}:${TAG_FULL} ${MAJOR_VERSION}
-                        ${params.TAG_AS_LATEST ? "crane tag ${IMAGE_BASE}:${TAG_FULL} latest" : ""}
-                        
-                        echo "✓ Image tagged successfully"
-                    """
-                }
-            }
-        }
-        
+                
         stage('Test Image') {
             steps {
                 container('crane') {
@@ -318,8 +300,10 @@ ${params.TAG_AS_LATEST ? "• ${IMAGE_BASE}:latest" : ""}
                             --username "\${DOCKERHUB_CREDS_USR}" \
                             --password-stdin
                         
-                        # Push dell'immagine dal tar
+                        # Push l'immagine principale dal tar
                         crane push /workspace/image.tar ${IMAGE_BASE}:${TAG_FULL}
+                        
+                        # Ora possiamo fare i tag (l'immagine è nel registry)
                         crane tag ${IMAGE_BASE}:${TAG_FULL} ${TAG_VERSION}
                         crane tag ${IMAGE_BASE}:${TAG_FULL} ${MAJOR_VERSION}
                         
