@@ -1,5 +1,6 @@
 #!/bin/bash
-# Copyright Broadcom, Inc. All Rights Reserved.
+# Copyright Vcnngr
+# Based on Bitnami work - Copyright Broadcom, Inc.
 # SPDX-License-Identifier: APACHE-2.0
 #
 # Environment configuration for apache
@@ -14,7 +15,7 @@
 # shellcheck disable=SC1090,SC1091
 . /opt/vcnngr/scripts/liblog.sh
 
-export VCNNGR_ROOT_DIR="/opt/bitnami"
+export VCNNGR_ROOT_DIR="/opt/vcnngr"
 export VCNNGR_VOLUME_DIR="/bitnami"
 
 # Logging configuration

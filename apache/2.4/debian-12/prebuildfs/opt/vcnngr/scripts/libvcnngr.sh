@@ -1,5 +1,6 @@
 #!/bin/bash
-# Copyright Broadcom, Inc. All Rights Reserved.
+# Copyright Vcnngr
+# Based on Bitnami work - Copyright Broadcom, Inc.
 # SPDX-License-Identifier: APACHE-2.0
 #
 # Bitnami custom library

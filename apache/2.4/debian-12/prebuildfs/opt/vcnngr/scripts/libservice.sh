@@ -1,5 +1,6 @@
 #!/bin/bash
-# Copyright Broadcom, Inc. All Rights Reserved.
+# Copyright Vcnngr
+# Based on Bitnami work - Copyright Broadcom, Inc.
 # SPDX-License-Identifier: APACHE-2.0
 #
 # Library for managing services
@@ -132,7 +133,8 @@ generate_cron_conf() {
     mkdir -p /etc/cron.d
     if "$clean"; then
         cat > "/etc/cron.d/${service_name}" <<EOF
-# Copyright Broadcom, Inc. All Rights Reserved.
+# Copyright Vcnngr
+# Based on Bitnami work - Copyright Broadcom, Inc.
 # SPDX-License-Identifier: APACHE-2.0
 
 ${schedule} ${run_as} ${cmd}
@@ -181,7 +183,8 @@ generate_logrotate_conf() {
 
     mkdir -p "$logrotate_conf_dir"
     cat <<EOF | sed '/^\s*$/d' > "${logrotate_conf_dir}/${service_name}"
-# Copyright Broadcom, Inc. All Rights Reserved.
+# Copyright Vcnngr
+# Based on Bitnami work - Copyright Broadcom, Inc.
 # SPDX-License-Identifier: APACHE-2.0
 
 ${log_path} {
@@ -328,7 +331,8 @@ generate_systemd_conf() {
     fi
     # Generate the Systemd unit
     cat > "$service_file" <<EOF
-# Copyright Broadcom, Inc. All Rights Reserved.
+# Copyright Vcnngr
+# Based on Bitnami work - Copyright Broadcom, Inc.
 # SPDX-License-Identifier: APACHE-2.0
 
 [Unit]

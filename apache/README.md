@@ -332,7 +332,7 @@ Before extending this image, please note there are certain configuration setting
 If your desired customizations cannot be covered using the methods mentioned above, extend the image. To do so, create your own image using a Dockerfile with the format below:
 
 ```Dockerfile
-FROM vcnngr/apache
+FROM bitnami/apache
 ### Put your customizations below
 ...
 ```
@@ -345,7 +345,7 @@ Here is an example of extending the image with the following modifications:
 - Change the user that runs the container
 
 ```Dockerfile
-FROM vcnngr/apache
+FROM bitnami/apache
 
 ### Change user to perform privileged actions
 USER 0
