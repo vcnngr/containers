@@ -193,10 +193,10 @@ ${params.TAG_AS_LATEST ? "• ${IMAGE_BASE}:latest" : ""}
                     sh """
                         cd ${BUILD_CONTEXT}
                         
-                        # Crea il file secret in /workspace
-                        echo "downloads.bitnami.com/files/stacksmith" > /workspace/downloads_url_secret
+                        # Crea il file secret nella directory corrente
+                        echo "downloads.bitnami.com/files/stacksmith" > ./downloads_url_secret
                         
-                        # Build con Kaniko
+                        # Build con Kaniko con cache locale
                         /kaniko/executor \
                             --context=\$(pwd) \
                             --dockerfile=Dockerfile \
@@ -207,13 +207,12 @@ ${params.TAG_AS_LATEST ? "• ${IMAGE_BASE}:latest" : ""}
                             --label org.opencontainers.image.version=${params.APACHE_VERSION} \
                             --label org.opencontainers.image.vendor=Vcnngr \
                             --cache=true \
-                            --cache-ttl=24h \
-                            --compressed-caching=false \
+                            --cache-dir=/workspace/cache \
                             --no-push \
-                            --tarPath=/workspace/image.tar
+                            --tar-path=/workspace/image.tar
                         
                         # Rimuovi il file secret
-                        rm -f /workspace/downloads_url_secret
+                        rm -f ./downloads_url_secret
                         
                         echo "✓ Image built successfully"
                     """
