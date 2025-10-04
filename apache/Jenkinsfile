@@ -181,36 +181,34 @@ ${params.TAG_AS_LATEST ? "• ${IMAGE_BASE}:latest" : ""}
         stage('Build Image') {
             steps {
                 container('buildah') {
-                    script {
-                        // Crea il file secret in modo sicuro
-                        writeFile file: '/tmp/downloads_url_secret', text: 'downloads.bitnami.com/files/stacksmith'
+                    sh """
+                        cd ${BUILD_CONTEXT}
                         
-                        sh """
-                            cd ${BUILD_CONTEXT}
-                            
-                            buildah bud \
-                                --format docker \
-                                --build-arg TARGETARCH=${params.BUILD_ARCH} \
-                                --build-arg DOWNLOADS_URL=downloads.bitnami.com/files/stacksmith \
-                                --secret id=downloads_url,src=/tmp/downloads_url_secret \
-                                --layers \
-                                --tag ${IMAGE_BASE}:${TAG_FULL} \
-                                --tag ${IMAGE_BASE}:${TAG_VERSION} \
-                                --tag ${IMAGE_BASE}:${MAJOR_VERSION} \
-                                ${params.TAG_AS_LATEST ? "--tag ${IMAGE_BASE}:latest" : ""} \
-                                --label "org.opencontainers.image.created=${BUILD_DATE}" \
-                                --label "org.opencontainers.image.version=${params.APACHE_VERSION}" \
-                                --label "org.opencontainers.image.vendor=Vcnngr" \
-                                -f Dockerfile \
-                                .
-                            
-                            echo "✓ Image built successfully"
-                            buildah images | grep ${CONTAINER_NAME}
-                        """
+                        # Crea il file secret nella directory corrente
+                        echo "downloads.bitnami.com/files/stacksmith" > ./downloads_url_secret
                         
-                        // Cleanup
-                        sh "rm -f /tmp/downloads_url_secret"
-                    }
+                        buildah bud \
+                            --format docker \
+                            --build-arg TARGETARCH=${params.BUILD_ARCH} \
+                            --build-arg DOWNLOADS_URL=downloads.bitnami.com/files/stacksmith \
+                            --secret id=downloads_url,src=./downloads_url_secret \
+                            --layers \
+                            --tag ${IMAGE_BASE}:${TAG_FULL} \
+                            --tag ${IMAGE_BASE}:${TAG_VERSION} \
+                            --tag ${IMAGE_BASE}:${MAJOR_VERSION} \
+                            ${params.TAG_AS_LATEST ? "--tag ${IMAGE_BASE}:latest" : ""} \
+                            --label "org.opencontainers.image.created=${BUILD_DATE}" \
+                            --label "org.opencontainers.image.version=${params.APACHE_VERSION}" \
+                            --label "org.opencontainers.image.vendor=Vcnngr" \
+                            -f Dockerfile \
+                            .
+                        
+                        # Rimuovi il file secret
+                        rm -f ./downloads_url_secret
+                        
+                        echo "✓ Image built successfully"
+                        buildah images | grep ${CONTAINER_NAME}
+                    """
                 }
             }
         }
