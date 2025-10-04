@@ -196,18 +196,19 @@ ${params.TAG_AS_LATEST ? "• ${IMAGE_BASE}:latest" : ""}
                         # Crea il file secret nella directory corrente
                         echo "downloads.bitnami.com/files/stacksmith" > ./downloads_url_secret
                         
-                        # Build con Kaniko con cache locale
+                        # Build con Kaniko con cache
                         /kaniko/executor \
                             --context=\$(pwd) \
                             --dockerfile=Dockerfile \
                             --destination=${IMAGE_BASE}:${TAG_FULL} \
+                            --cache=true \
+                            --cache-repo=${IMAGE_BASE}-cache \
+                            --cache-ttl=24h \
                             --build-arg TARGETARCH=${params.BUILD_ARCH} \
                             --build-arg DOWNLOADS_URL=downloads.bitnami.com/files/stacksmith \
                             --label org.opencontainers.image.created=${BUILD_DATE} \
                             --label org.opencontainers.image.version=${params.APACHE_VERSION} \
                             --label org.opencontainers.image.vendor=Vcnngr \
-                            --cache=true \
-                            --cache-dir=/workspace/cache \
                             --no-push \
                             --tar-path=/workspace/image.tar
                         
