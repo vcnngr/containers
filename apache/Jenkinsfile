@@ -193,8 +193,8 @@ ${params.TAG_AS_LATEST ? "• ${IMAGE_BASE}:latest" : ""}
                     sh """
                         cd ${BUILD_CONTEXT}
                         
-                        # Crea il file secret per il mount
-                        echo "downloads.bitnami.com/files/stacksmith" > /tmp/downloads_url_secret
+                        # Crea il file secret in /workspace
+                        echo "downloads.bitnami.com/files/stacksmith" > /workspace/downloads_url_secret
                         
                         # Build con Kaniko
                         /kaniko/executor \
@@ -211,6 +211,9 @@ ${params.TAG_AS_LATEST ? "• ${IMAGE_BASE}:latest" : ""}
                             --compressed-caching=false \
                             --no-push \
                             --tarPath=/workspace/image.tar
+                        
+                        # Rimuovi il file secret
+                        rm -f /workspace/downloads_url_secret
                         
                         echo "✓ Image built successfully"
                     """
