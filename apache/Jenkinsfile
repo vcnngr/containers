@@ -196,13 +196,13 @@ ${params.TAG_AS_LATEST ? "• ${IMAGE_BASE}:latest" : ""}
                         # Crea il file secret nella directory corrente
                         echo "downloads.bitnami.com/files/stacksmith" > ./downloads_url_secret
                         
-                        # Build con Kaniko con cache
+                        # Build con Kaniko con cache OCI locale (nessuna autenticazione necessaria)
                         /kaniko/executor \
                             --context=\$(pwd) \
                             --dockerfile=Dockerfile \
                             --destination=${IMAGE_BASE}:${TAG_FULL} \
                             --cache=true \
-                            --cache-repo=${IMAGE_BASE}-cache \
+                            --cache-repo=oci:/workspace/cache \
                             --cache-ttl=24h \
                             --build-arg TARGETARCH=${params.BUILD_ARCH} \
                             --build-arg DOWNLOADS_URL=downloads.bitnami.com/files/stacksmith \
