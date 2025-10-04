@@ -17,23 +17,34 @@ metadata:
     container: apache
 spec:
   serviceAccountName: jenkins
+  securityContext:
+    runAsUser: 0
+    fsGroup: 0
+  volumes:
+  - name: docker-sock
+    hostPath:
+      path: /var/run/docker.sock
+      type: Socket
   containers:
-  - name: kaniko
-    image: gcr.io/kaniko-project/executor:debug
-    command: ["/busybox/cat"]
+  - name: debian
+    image: debian:bookworm
+    command: [cat]
     tty: true
+    securityContext:
+      privileged: true
+    resources:
+      requests:
+        memory: "4Gi"
+        cpu: "2000m"
+      limits:
+        memory: "8Gi"
+        cpu: "4000m"
     volumeMounts:
-    - name: docker-config
-      mountPath: /kaniko/.docker
-    - name: workspace
-      mountPath: /workspace
-  - name: crane
-    image: gcr.io/go-containerregistry/crane:debug
-    command: ["/busybox/cat"]
-    tty: true
-    volumeMounts:
-    - name: workspace
-      mountPath: /workspace
+    - name: docker-sock
+      mountPath: /var/run/docker.sock
+    env:
+    - name: DEBIAN_FRONTEND
+      value: noninteractive
   - name: shellcheck
     image: koalaman/shellcheck-alpine:latest
     command: [cat]
@@ -47,13 +58,8 @@ spec:
     command: [cat]
     tty: true
     volumeMounts:
-    - name: workspace
-      mountPath: /workspace
-  volumes:
-  - name: docker-config
-    emptyDir: {}
-  - name: workspace
-    emptyDir: {}
+    - name: docker-sock
+      mountPath: /var/run/docker.sock
 '''
         }
     }
@@ -91,6 +97,19 @@ spec:
     }
     
     stages {
+        stage('Setup') {
+            steps {
+                container('debian') {
+                    sh '''
+                        set -e
+                        apt-get update -qq
+                        apt-get install -y -qq docker.io curl git
+                        docker version
+                    '''
+                }
+            }
+        }
+        
         stage('Validate') {
             steps {
                 script {
@@ -189,54 +208,86 @@ ${params.TAG_AS_LATEST ? "• ${IMAGE_BASE}:latest" : ""}
         
         stage('Build Image') {
             steps {
-                container('kaniko') {
+                container('debian') {
                     sh """
                         cd ${BUILD_CONTEXT}
                         
-                        # Crea il file secret nella directory corrente
+                        # Crea il file secret per il Dockerfile
                         echo "downloads.bitnami.com/files/stacksmith" > ./downloads_url_secret
                         
-                        # Build con Kaniko con cache OCI locale (nessuna autenticazione necessaria)
-                        /kaniko/executor \
-                            --context=\$(pwd) \
-                            --dockerfile=Dockerfile \
-                            --destination=${IMAGE_BASE}:${TAG_FULL} \
-                            --cache=true \
-                            --cache-repo=oci:/workspace/cache \
-                            --cache-ttl=24h \
+                        # Build con Docker usando BuildKit per i secrets
+                        export DOCKER_BUILDKIT=1
+                        
+                        docker build \
+                            --secret id=downloads_url,src=./downloads_url_secret \
                             --build-arg TARGETARCH=${params.BUILD_ARCH} \
                             --build-arg DOWNLOADS_URL=downloads.bitnami.com/files/stacksmith \
-                            --label org.opencontainers.image.created=${BUILD_DATE} \
-                            --label org.opencontainers.image.version=${params.APACHE_VERSION} \
-                            --label org.opencontainers.image.vendor=Vcnngr \
-                            --no-push \
-                            --tar-path=/workspace/image.tar
+                            --label "org.opencontainers.image.created=${BUILD_DATE}" \
+                            --label "org.opencontainers.image.version=${params.APACHE_VERSION}" \
+                            --label "org.opencontainers.image.vendor=Vcnngr" \
+                            --tag ${IMAGE_BASE}:${TAG_FULL} \
+                            --tag ${IMAGE_BASE}:${TAG_VERSION} \
+                            --tag ${IMAGE_BASE}:${MAJOR_VERSION} \
+                            ${params.TAG_AS_LATEST ? "--tag ${IMAGE_BASE}:latest" : ""} \
+                            -f Dockerfile \
+                            .
                         
-                        # Rimuovi il file secret
+                        # Cleanup secret file
                         rm -f ./downloads_url_secret
                         
                         echo "✓ Image built successfully"
+                        docker images ${IMAGE_BASE}:${TAG_FULL}
                     """
                 }
             }
         }
-                
+        
         stage('Test Image') {
             steps {
-                container('crane') {
+                container('debian') {
                     sh """
-                        echo "Testing image metadata..."
+                        echo "Testing ${IMAGE_BASE}:${TAG_FULL}"
                         
-                        # Inspect con crane
-                        crane config ${IMAGE_BASE}:${TAG_FULL} > /tmp/config.json
+                        echo "Test 1: Image starts correctly"
+                        CONTAINER_ID=\$(docker run -d -p 8080:8080 ${IMAGE_BASE}:${TAG_FULL})
+                        echo "Container started: \$CONTAINER_ID"
                         
-                        USER_ID=\$(cat /tmp/config.json | grep -o '"User":"[^"]*"' | cut -d'"' -f4 || echo "")
+                        # Aspetta che Apache sia pronto
+                        echo "Waiting for Apache to start..."
+                        sleep 15
                         
-                        if [ "\$USER_ID" = "1001" ] || [ -z "\$USER_ID" ]; then
-                            echo "✓ Image configuration valid"
+                        echo "Test 2: Container logs"
+                        docker logs \$CONTAINER_ID | head -20
+                        
+                        echo "Test 3: HTTP Response"
+                        # Installa curl se non presente
+                        apt-get install -y curl 2>/dev/null || true
+                        
+                        RESPONSE=\$(docker exec \$CONTAINER_ID curl -s -o /dev/null -w "%{http_code}" http://localhost:8080 || echo "000")
+                        
+                        if [ "\$RESPONSE" = "200" ]; then
+                            echo "✓ Apache responding with HTTP 200"
                         else
-                            echo "WARNING: Unexpected user ID: \$USER_ID"
+                            echo "ERROR: Apache returned HTTP \$RESPONSE"
+                            docker logs \$CONTAINER_ID
+                            docker stop \$CONTAINER_ID
+                            docker rm \$CONTAINER_ID
+                            exit 1
                         fi
+                        
+                        echo "Test 4: User verification"
+                        USER=\$(docker exec \$CONTAINER_ID whoami || echo "unknown")
+                        echo "Running as user: \$USER"
+                        
+                        echo "Test 5: Apache version"
+                        docker exec \$CONTAINER_ID httpd -v || echo "Could not get Apache version"
+                        
+                        echo "Test 6: Process check"
+                        docker exec \$CONTAINER_ID ps aux | grep httpd || true
+                        
+                        # Cleanup
+                        docker stop \$CONTAINER_ID
+                        docker rm \$CONTAINER_ID
                         
                         echo "✓ All tests passed"
                     """
@@ -260,20 +311,16 @@ ${params.TAG_AS_LATEST ? "• ${IMAGE_BASE}:latest" : ""}
                                 }
                                 
                                 sh """
-                                    # Scan del tar file
                                     trivy image \
-                                        --input /workspace/image.tar \
                                         --severity HIGH,CRITICAL \
                                         --exit-code 0 \
-                                        --timeout 10m
+                                        --timeout 10m \
+                                        ${IMAGE_BASE}:${TAG_FULL}
                                     
                                     trivy image \
-                                        --input /workspace/image.tar \
                                         --format json \
-                                        --output /workspace/trivy-report.json || true
-                                    
-                                    # Copia il report nel workspace Jenkins
-                                    cp /workspace/trivy-report.json ${WORKSPACE}/ || true
+                                        --output trivy-report.json \
+                                        ${IMAGE_BASE}:${TAG_FULL} || true
                                 """
                                 break
                             } catch (Exception e) {
@@ -292,23 +339,20 @@ ${params.TAG_AS_LATEST ? "• ${IMAGE_BASE}:latest" : ""}
                 expression { params.PUSH_TO_DOCKERHUB }
             }
             steps {
-                container('crane') {
+                container('debian') {
                     sh """
-                        # Login to DockerHub
-                        echo "\${DOCKERHUB_CREDS_PSW}" | crane auth login \
-                            ${DOCKERHUB_REGISTRY} \
+                        echo "\${DOCKERHUB_CREDS_PSW}" | docker login \
                             --username "\${DOCKERHUB_CREDS_USR}" \
-                            --password-stdin
+                            --password-stdin \
+                            ${DOCKERHUB_REGISTRY}
                         
-                        # Push l'immagine principale dal tar
-                        crane push /workspace/image.tar ${IMAGE_BASE}:${TAG_FULL}
+                        docker push ${IMAGE_BASE}:${TAG_FULL}
+                        docker push ${IMAGE_BASE}:${TAG_VERSION}
+                        docker push ${IMAGE_BASE}:${MAJOR_VERSION}
                         
-                        # Ora possiamo fare i tag (l'immagine è nel registry)
-                        crane tag ${IMAGE_BASE}:${TAG_FULL} ${TAG_VERSION}
-                        crane tag ${IMAGE_BASE}:${TAG_FULL} ${MAJOR_VERSION}
+                        ${params.TAG_AS_LATEST ? "docker push ${IMAGE_BASE}:latest" : ""}
                         
-                        ${params.TAG_AS_LATEST ? "crane tag ${IMAGE_BASE}:${TAG_FULL} latest" : ""}
-                        
+                        docker logout
                         echo "✓ Images pushed successfully"
                     """
                 }
@@ -367,8 +411,9 @@ Quick test:
                 }
                 
                 try {
-                    container('crane') {
-                        sh "rm -f /workspace/image.tar || true"
+                    container('debian') {
+                        sh "docker logout ${DOCKERHUB_REGISTRY} || true"
+                        sh "docker system prune -af || true"
                     }
                 } catch (Exception e) {
                     echo "Cleanup skipped"
