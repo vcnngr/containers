@@ -33,9 +33,9 @@ COPY prebuildfs /
 SHELL ["/bin/bash", "-o", "errexit", "-o", "nounset", "-o", "pipefail", "-c"]
 # Install required system packages and dependencies
 RUN install_packages ca-certificates curl libcrypt1 libexpat1 libffi8 libgcc-s1 libgmp10 libgnutls30 libhogweed6 libicu72 libidn2-0 libldap-2.5-0 liblzma5 libnettle8 libnghttp2-14 libp11-kit0 libpcre2-8-0 libpcre3 libsasl2-2 libssl3 libstdc++6 libtasn1-6 libunistring2 libxml2 openssl procps zlib1g
-RUN --mount=type=secret,id=downloads_url,env=SECRET_DOWNLOADS_URL \
-    DOWNLOADS_URL=${SECRET_DOWNLOADS_URL:-${DOWNLOADS_URL}} ; \
-    mkdir -p /tmp/vcnngr/pkg/cache/ ; cd /tmp/vcnngr/pkg/cache/ || exit 1 ; \
+RUN --mount=type=secret,id=downloads_url \
+    DOWNLOADS_URL=$(cat /run/secrets/downloads_url 2>/dev/null || echo "${DOWNLOADS_URL}") ; \
+    mkdir -p /tmp/vcnngr/pkg/cache/ /opt/vcnngr ; cd /tmp/vcnngr/pkg/cache/ || exit 1 ; \
     COMPONENTS=( \
       "render-template-1.0.9-156-linux-${OS_ARCH}-debian-12" \
       "apache-2.4.65-1-linux-${OS_ARCH}-debian-12" \
