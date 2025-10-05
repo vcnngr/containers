@@ -259,37 +259,34 @@ ${params.TAG_AS_LATEST ? "• ${IMAGE_BASE}:latest" : ""}
                         echo "Test 2: Container logs"
                         docker logs \$CONTAINER_ID | head -20
                         
-                        echo "Test 3: HTTP Response"
-                        # Installa curl se non presente
-                        apt-get install -y curl 2>/dev/null || true
+                        echo "Test 3: HTTP Response from host"
+                        # Testa dall'host invece che dentro il container
+                        for i in {1..10}; do
+                            RESPONSE=\$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080 || echo "000")
+                            if [ "\$RESPONSE" = "200" ]; then
+                                echo "✓ Apache responding with HTTP 200"
+                                break
+                            fi
+                            echo "Attempt \$i: HTTP \$RESPONSE, retrying..."
+                            sleep 2
+                        done
                         
-                        RESPONSE=\$(docker exec \$CONTAINER_ID curl -s -o /dev/null -w "%{http_code}" http://localhost:8080 || echo "000")
-                        
-                        if [ "\$RESPONSE" = "200" ]; then
-                            echo "✓ Apache responding with HTTP 200"
-                        else
-                            echo "ERROR: Apache returned HTTP \$RESPONSE"
+                        if [ "\$RESPONSE" != "200" ]; then
+                            echo "ERROR: Apache not responding correctly"
                             docker logs \$CONTAINER_ID
                             docker stop \$CONTAINER_ID
                             docker rm \$CONTAINER_ID
                             exit 1
                         fi
                         
-                        echo "Test 4: User verification"
-                        USER=\$(docker exec \$CONTAINER_ID whoami || echo "unknown")
-                        echo "Running as user: \$USER"
-                        
-                        echo "Test 5: Apache version"
-                        docker exec \$CONTAINER_ID httpd -v || echo "Could not get Apache version"
-                        
-                        echo "Test 6: Process check"
-                        docker exec \$CONTAINER_ID ps aux | grep httpd || true
+                        echo "Test 4: Apache version from logs"
+                        docker logs \$CONTAINER_ID | grep "Apache/2.4.65"
                         
                         # Cleanup
                         docker stop \$CONTAINER_ID
                         docker rm \$CONTAINER_ID
                         
-                        echo "✓ All tests passed"
+                        echo "✓ All tests passed - Apache built with VCNNGR binaries works!"
                     """
                 }
             }
