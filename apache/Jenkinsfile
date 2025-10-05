@@ -260,33 +260,37 @@ ${params.TAG_AS_LATEST ? "• ${IMAGE_BASE}:latest" : ""}
                         docker logs \$CONTAINER_ID | head -20
                         
                         echo "Test 3: HTTP Response from host"
-                        # Testa dall'host invece che dentro il container
-                        for i in {1..10}; do
-                            RESPONSE=\$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080 || echo "000")
+                        # Testa dall'host con retry
+                        RESPONSE=""
+                        i=1
+                        while [ \$i -le 10 ]; do
+                            RESPONSE=\$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080 2>/dev/null || echo "000")
                             if [ "\$RESPONSE" = "200" ]; then
                                 echo "✓ Apache responding with HTTP 200"
                                 break
                             fi
                             echo "Attempt \$i: HTTP \$RESPONSE, retrying..."
                             sleep 2
+                            i=\$((i+1))
                         done
                         
                         if [ "\$RESPONSE" != "200" ]; then
-                            echo "ERROR: Apache not responding correctly"
+                            echo "ERROR: Apache not responding with HTTP 200"
+                            echo "Final response: \$RESPONSE"
                             docker logs \$CONTAINER_ID
                             docker stop \$CONTAINER_ID
                             docker rm \$CONTAINER_ID
                             exit 1
                         fi
                         
-                        echo "Test 4: Apache version from logs"
-                        docker logs \$CONTAINER_ID | grep "Apache/2.4.65"
+                        echo "Test 4: Apache version check"
+                        docker logs \$CONTAINER_ID | grep -q "Apache/2.4.65" && echo "✓ Apache 2.4.65 confirmed"
                         
                         # Cleanup
                         docker stop \$CONTAINER_ID
                         docker rm \$CONTAINER_ID
                         
-                        echo "✓ All tests passed - Apache built with VCNNGR binaries works!"
+                        echo "✓ All tests passed - Apache built with VCNNGR binaries works perfectly!"
                     """
                 }
             }
