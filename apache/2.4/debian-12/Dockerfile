@@ -12,7 +12,7 @@
 
 FROM docker.io/vcnngr/minideb:bookworm
 
-ARG DOWNLOADS_URL="minio.ingrosso.net/vcnngr-binaries"
+ARG DOWNLOADS_URL="minio.vcnngr.it/vcnngr-binaries"
 ARG TARGETARCH
 
 LABEL org.opencontainers.image.base.name="docker.io/vcnngr/minideb:bookworm" \
