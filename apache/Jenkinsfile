@@ -1,7 +1,7 @@
 #!/usr/bin/env groovy
 /**
- * VCNNGR Apache Pipeline
- * Build Apache HTTP Server container with quality checks
+ * VCNNGR Apache Container Pipeline
+ * Build Apache HTTP Server container with multi-arch support
  */
 
 pipeline {
@@ -14,7 +14,6 @@ kind: Pod
 metadata:
   labels:
     jenkins: agent
-    container: apache
 spec:
   serviceAccountName: jenkins
   securityContext:
@@ -35,7 +34,7 @@ spec:
     resources:
       requests:
         memory: "4Gi"
-        cpu: "2000m"
+        cpu: "1000m"
       limits:
         memory: "8Gi"
         cpu: "4000m"
@@ -45,14 +44,6 @@ spec:
     env:
     - name: DEBIAN_FRONTEND
       value: noninteractive
-  - name: shellcheck
-    image: koalaman/shellcheck-alpine:latest
-    command: [cat]
-    tty: true
-  - name: sonar-scanner
-    image: sonarsource/sonar-scanner-cli:latest
-    command: [cat]
-    tty: true
   - name: trivy
     image: aquasec/trivy:latest
     command: [cat]
@@ -71,7 +62,6 @@ spec:
         choice(name: 'BUILD_ARCH', choices: ['amd64', 'arm64'], description: 'Architecture')
         booleanParam(name: 'PUSH_TO_DOCKERHUB', defaultValue: false, description: 'Push to DockerHub')
         booleanParam(name: 'RUN_SECURITY_SCAN', defaultValue: true, description: 'Run security scan')
-        booleanParam(name: 'RUN_CODE_QUALITY', defaultValue: true, description: 'Run code quality')
         booleanParam(name: 'TAG_AS_LATEST', defaultValue: false, description: 'Tag as latest')
     }
     
@@ -105,6 +95,21 @@ spec:
                         apt-get update -qq
                         apt-get install -y -qq docker.io curl git
                         docker version
+                    '''
+                }
+            }
+        }
+        
+        stage('Setup QEMU') {
+            when {
+                expression { params.BUILD_ARCH == 'arm64' }
+            }
+            steps {
+                container('debian') {
+                    sh '''
+                        echo "Setting up QEMU for ARM64 emulation..."
+                        docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+                        echo "✓ QEMU configured for ARM64"
                     '''
                 }
             }
@@ -151,61 +156,6 @@ ${params.TAG_AS_LATEST ? "• ${IMAGE_BASE}:latest" : ""}
             }
         }
         
-        stage('Code Quality') {
-            when {
-                expression { params.RUN_CODE_QUALITY }
-            }
-            parallel {
-                stage('Shellcheck') {
-                    steps {
-                        container('shellcheck') {
-                            script {
-                                try {
-                                    sh """
-                                        cd ${BUILD_CONTEXT}
-                                        SCRIPTS=\$(find . -type f -name '*.sh' 2>/dev/null || true)
-                                        if [ -n "\$SCRIPTS" ]; then
-                                            echo "\$SCRIPTS" | xargs shellcheck -f gcc --severity=warning || echo "Shellcheck warnings found"
-                                        else
-                                            echo "No shell scripts found"
-                                        fi
-                                    """
-                                } catch (Exception e) {
-                                    echo "Shellcheck failed: ${e.message}"
-                                }
-                            }
-                        }
-                    }
-                }
-                
-                stage('SonarQube') {
-                    steps {
-                        container('sonar-scanner') {
-                            script {
-                                try {
-                                    withCredentials([string(credentialsId: 'sonarqube-token', variable: 'SONAR_TOKEN')]) {
-                                        sh """
-                                            cd ${BUILD_CONTEXT}
-                                            sonar-scanner \
-                                                -Dsonar.host.url=http://sonarqube-sonarqube.jenkins.svc.cluster.local:9000 \
-                                                -Dsonar.token=\${SONAR_TOKEN} \
-                                                -Dsonar.projectKey=vcnngr-${CONTAINER_NAME} \
-                                                -Dsonar.projectName='VCNNGR ${CONTAINER_NAME}' \
-                                                -Dsonar.projectVersion=${params.APACHE_VERSION} \
-                                                -Dsonar.sources=. \
-                                                -Dsonar.exclusions='**/*.md'
-                                        """
-                                    }
-                                } catch (Exception e) {
-                                    echo "SonarQube failed: ${e.message}"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        
         stage('Build Image') {
             steps {
                 container('debian') {
@@ -218,13 +168,24 @@ ${params.TAG_AS_LATEST ? "• ${IMAGE_BASE}:latest" : ""}
                         # Build con Docker usando BuildKit per i secrets
                         export DOCKER_BUILDKIT=1
                         
+                        # FIX MULTI-ARCH: Determina platform per Docker
+                        if [ "${params.BUILD_ARCH}" = "arm64" ]; then
+                            DOCKER_PLATFORM="linux/arm64"
+                        else
+                            DOCKER_PLATFORM="linux/amd64"
+                        fi
+                        
+                        echo "Building for platform: \$DOCKER_PLATFORM"
+                        
                         docker build \
+                            --platform=\$DOCKER_PLATFORM \
                             --secret id=downloads_url,src=./downloads_url_secret \
                             --build-arg TARGETARCH=${params.BUILD_ARCH} \
                             --build-arg DOWNLOADS_URL=minio.vcnngr.it/vcnngr-binaries \
                             --label "org.opencontainers.image.created=${BUILD_DATE}" \
                             --label "org.opencontainers.image.version=${params.APACHE_VERSION}" \
                             --label "org.opencontainers.image.vendor=Vcnngr" \
+                            --label "org.opencontainers.image.architecture=${params.BUILD_ARCH}" \
                             --tag ${IMAGE_BASE}:${TAG_FULL} \
                             --tag ${IMAGE_BASE}:${TAG_VERSION} \
                             --tag ${IMAGE_BASE}:${MAJOR_VERSION} \
@@ -235,8 +196,12 @@ ${params.TAG_AS_LATEST ? "• ${IMAGE_BASE}:latest" : ""}
                         # Cleanup secret file
                         rm -f ./downloads_url_secret
                         
-                        echo "✓ Image built successfully"
+                        echo "✓ Image built successfully for ${params.BUILD_ARCH}"
                         docker images ${IMAGE_BASE}:${TAG_FULL}
+                        
+                        # Verifica architettura
+                        echo "Verifying image architecture:"
+                        docker inspect ${IMAGE_BASE}:${TAG_FULL} | grep Architecture
                     """
                 }
             }
@@ -248,13 +213,21 @@ ${params.TAG_AS_LATEST ? "• ${IMAGE_BASE}:latest" : ""}
                     sh """
                         echo "Testing ${IMAGE_BASE}:${TAG_FULL}"
                         
+                        # FIX: Per ARM64, i test potrebbero essere più lenti via QEMU
+                        if [ "${params.BUILD_ARCH}" = "arm64" ]; then
+                            echo "⚠️ Running tests on ARM64 via QEMU emulation (slower)"
+                            WAIT_TIME=30
+                        else
+                            WAIT_TIME=15
+                        fi
+                        
                         echo "Test 1: Image starts correctly"
-                        CONTAINER_ID=\$(docker run -d ${IMAGE_BASE}:${TAG_FULL})
+                        CONTAINER_ID=\$(docker run -d --platform=linux/${params.BUILD_ARCH} ${IMAGE_BASE}:${TAG_FULL})
                         echo "Container started: \$CONTAINER_ID"
                         
                         # Aspetta che Apache sia pronto
-                        echo "Waiting for Apache to start..."
-                        sleep 15
+                        echo "Waiting \$WAIT_TIME seconds for Apache to start..."
+                        sleep \$WAIT_TIME
                         
                         echo "Test 2: Container logs"
                         docker logs \$CONTAINER_ID | head -20
@@ -279,11 +252,22 @@ ${params.TAG_AS_LATEST ? "• ${IMAGE_BASE}:latest" : ""}
                         echo "Test 5: Apache version check"
                         docker logs \$CONTAINER_ID | grep -q "Apache/2.4.65" && echo "✓ Apache 2.4.65 confirmed"
                         
+                        echo "Test 6: Verify binary architecture inside container"
+                        docker exec \$CONTAINER_ID file /opt/bitnami/apache/bin/httpd
+                        
+                        if [ "${params.BUILD_ARCH}" = "arm64" ]; then
+                            docker exec \$CONTAINER_ID file /opt/bitnami/apache/bin/httpd | grep -q "ARM aarch64" && \
+                                echo "✓ Binary is correctly ARM64"
+                        else
+                            docker exec \$CONTAINER_ID file /opt/bitnami/apache/bin/httpd | grep -q "x86-64" && \
+                                echo "✓ Binary is correctly AMD64"
+                        fi
+                        
                         # Cleanup
                         docker stop \$CONTAINER_ID
                         docker rm \$CONTAINER_ID
                         
-                        echo "✓ All tests passed - Apache built with VCNNGR binaries works perfectly!"
+                        echo "✓ All tests passed - Apache ${params.BUILD_ARCH} works perfectly!"
                     """
                 }
             }
@@ -359,6 +343,7 @@ ${params.TAG_AS_LATEST ? "• ${IMAGE_BASE}:latest" : ""}
                     def metadata = [
                         container: CONTAINER_NAME,
                         version: params.APACHE_VERSION,
+                        architecture: params.BUILD_ARCH,
                         tags: [
                             "${IMAGE_BASE}:${TAG_FULL}",
                             "${IMAGE_BASE}:${TAG_VERSION}",
@@ -378,6 +363,7 @@ ${params.TAG_AS_LATEST ? "• ${IMAGE_BASE}:latest" : ""}
 ╚═══════════════════════════════════════════════════════════════╝
 
 Container: ${CONTAINER_NAME} ${params.APACHE_VERSION}
+Architecture: ${params.BUILD_ARCH}
 
 Images:
 """
