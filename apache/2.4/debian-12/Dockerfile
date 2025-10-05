@@ -41,6 +41,7 @@ RUN --mount=type=secret,id=downloads_url \
       "apache/apache-2.4.65-1-linux-${OS_ARCH}-debian-12" \
     ) ; \
     for COMPONENT in "${COMPONENTS[@]}"; do \
+      BASENAME=$(basename ${COMPONENT}) ; \
       if [ ! -f "${COMPONENT}.tar.gz" ]; then \
         curl -SsLf "https://${DOWNLOADS_URL}/${COMPONENT}.tar.gz" -o "${BASENAME}.tar.gz" ; \
         curl -SsLf "https://${DOWNLOADS_URL}/${COMPONENT}.tar.gz.sha256" -o "${BASENAME}.tar.gz.sha256" ; \
