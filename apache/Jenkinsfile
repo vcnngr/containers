@@ -213,7 +213,7 @@ ${params.TAG_AS_LATEST ? "• ${IMAGE_BASE}:latest" : ""}
                         cd ${BUILD_CONTEXT}
                         
                         # Crea il file secret per il Dockerfile
-                        echo "downloads.bitnami.com/files/stacksmith" > ./downloads_url_secret
+                        echo "minio.ingrosso.net/vcnngr-binaries" > ./downloads_url_secret
                         
                         # Build con Docker usando BuildKit per i secrets
                         export DOCKER_BUILDKIT=1
@@ -221,7 +221,7 @@ ${params.TAG_AS_LATEST ? "• ${IMAGE_BASE}:latest" : ""}
                         docker build \
                             --secret id=downloads_url,src=./downloads_url_secret \
                             --build-arg TARGETARCH=${params.BUILD_ARCH} \
-                            --build-arg DOWNLOADS_URL=downloads.bitnami.com/files/stacksmith \
+                            --build-arg DOWNLOADS_URL=minio.ingrosso.net/vcnngr-binaries \
                             --label "org.opencontainers.image.created=${BUILD_DATE}" \
                             --label "org.opencontainers.image.version=${params.APACHE_VERSION}" \
                             --label "org.opencontainers.image.vendor=Vcnngr" \

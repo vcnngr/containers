@@ -12,7 +12,7 @@
 
 FROM docker.io/vcnngr/minideb:bookworm
 
-ARG DOWNLOADS_URL="downloads.bitnami.com/files/stacksmith"
+ARG DOWNLOADS_URL="minio.ingrosso.net/vcnngr-binaries"
 ARG TARGETARCH
 
 LABEL org.opencontainers.image.base.name="docker.io/vcnngr/minideb:bookworm" \
@@ -37,8 +37,8 @@ RUN --mount=type=secret,id=downloads_url \
     DOWNLOADS_URL=$(cat /run/secrets/downloads_url 2>/dev/null || echo "${DOWNLOADS_URL}") ; \
     mkdir -p /tmp/vcnngr/pkg/cache/ /opt/vcnngr ; cd /tmp/vcnngr/pkg/cache/ || exit 1 ; \
     COMPONENTS=( \
-      "render-template-1.0.9-156-linux-${OS_ARCH}-debian-12" \
-      "apache-2.4.65-1-linux-${OS_ARCH}-debian-12" \
+      "render-template/render-template-1.0.9-156-linux-${OS_ARCH}-debian-12" \
+      "apache/apache-2.4.65-1-linux-${OS_ARCH}-debian-12" \
     ) ; \
     for COMPONENT in "${COMPONENTS[@]}"; do \
       if [ ! -f "${COMPONENT}.tar.gz" ]; then \
