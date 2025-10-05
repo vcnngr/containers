@@ -46,7 +46,7 @@ print_image_welcome_page() {
     local github_url="https://github.com/bitnami/containers"
 
     info ""
-    info "${BOLD}Welcome to the Bitnami ${VCNNGR_APP_NAME} container${RESET}"
+    info "${BOLD}Welcome to the VCNNGR ${VCNNGR_APP_NAME} container${RESET}"
     info "Subscribe to project updates by watching ${BOLD}${github_url}${RESET}"
     info "${YELLOW}NOTICE: Starting August 28th, 2025, only a limited subset of images/charts will remain available for free. Backup will be available for some time at the 'Bitnami Legacy' repository. More info at https://github.com/bitnami/containers/issues/83267${RESET}"
     info ""
