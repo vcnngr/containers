@@ -4,7 +4,7 @@
 
 FROM docker.io/vcnngr/minideb:bookworm
 
-ARG DOWNLOADS_URL="downloads.bitnami.com/files/stacksmith"
+ARG DOWNLOADS_URL="minio.vcnngr.it/vcnngr-binaries"
 ARG TARGETARCH
 
 LABEL org.opencontainers.image.base.name="docker.io/vcnngr/minideb:bookworm" \
@@ -25,21 +25,22 @@ COPY prebuildfs /
 SHELL ["/bin/bash", "-o", "errexit", "-o", "nounset", "-o", "pipefail", "-c"]
 # Install required system packages and dependencies
 RUN install_packages ca-certificates curl libaio1 libaudit1 libcap-ng0 libcrypt1 libgcc-s1 libicu72 liblzma5 libncurses6 libpam0g libssl3 libstdc++6 libtinfo6 libxml2 procps psmisc zlib1g
-RUN --mount=type=secret,id=downloads_url,env=SECRET_DOWNLOADS_URL \
-    DOWNLOADS_URL=${SECRET_DOWNLOADS_URL:-${DOWNLOADS_URL}} ; \
-    mkdir -p /tmp/vcnngr/pkg/cache/ ; cd /tmp/vcnngr/pkg/cache/ || exit 1 ; \
+RUN --mount=type=secret,id=downloads_url \
+    DOWNLOADS_URL=$(cat /run/secrets/downloads_url 2>/dev/null || echo "${DOWNLOADS_URL}") ; \
+    mkdir -p /tmp/vcnngr/pkg/cache/ /opt/vcnngr ; cd /tmp/vcnngr/pkg/cache/ || exit 1 ; \
     COMPONENTS=( \
-      "ini-file-1.4.9-1-linux-${OS_ARCH}-debian-12" \
-      "mariadb-12.0.2-0-linux-${OS_ARCH}-debian-12" \
+      "ini-file/ini-file-1.4.9-1-linux-${OS_ARCH}-debian-12" \
+      "mariadb/mariadb-12.0.2-0-linux-${OS_ARCH}-debian-12" \
     ) ; \
     for COMPONENT in "${COMPONENTS[@]}"; do \
-      if [ ! -f "${COMPONENT}.tar.gz" ]; then \
-        curl -SsLf "https://${DOWNLOADS_URL}/${COMPONENT}.tar.gz" -O ; \
-        curl -SsLf "https://${DOWNLOADS_URL}/${COMPONENT}.tar.gz.sha256" -O ; \
+      BASENAME=$(basename ${COMPONENT}) ; \
+      if [ ! -f "${BASENAME}.tar.gz" ]; then \
+        curl -SsLf "https://${DOWNLOADS_URL}/${COMPONENT}.tar.gz" -o "${BASENAME}.tar.gz" ; \
+        curl -SsLf "https://${DOWNLOADS_URL}/${COMPONENT}.tar.gz.sha256" -o "${BASENAME}.tar.gz.sha256" ; \
       fi ; \
-      sha256sum -c "${COMPONENT}.tar.gz.sha256" ; \
-      tar -zxf "${COMPONENT}.tar.gz" -C /opt/vcnngr --strip-components=2 --no-same-owner ; \
-      rm -rf "${COMPONENT}".tar.gz{,.sha256} ; \
+      sha256sum -c "${BASENAME}.tar.gz.sha256" ; \
+      tar -zxf "${BASENAME}.tar.gz" -C /opt/vcnngr --strip-components=2 --no-same-owner ; \
+      rm -rf "${BASENAME}".tar.gz{,.sha256} ; \
     done
 RUN apt-get update && apt-get upgrade -y && \
     apt-get clean && rm -rf /var/lib/apt/lists /var/cache/apt/archives
