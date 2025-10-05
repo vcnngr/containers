@@ -42,13 +42,13 @@ RUN --mount=type=secret,id=downloads_url \
     ) ; \
     for COMPONENT in "${COMPONENTS[@]}"; do \
       BASENAME=$(basename ${COMPONENT}) ; \
-      if [ ! -f "${COMPONENT}.tar.gz" ]; then \
+      if [ ! -f "${BASENAME}.tar.gz" ]; then \
         curl -SsLf "https://${DOWNLOADS_URL}/${COMPONENT}.tar.gz" -o "${BASENAME}.tar.gz" ; \
         curl -SsLf "https://${DOWNLOADS_URL}/${COMPONENT}.tar.gz.sha256" -o "${BASENAME}.tar.gz.sha256" ; \
       fi ; \
-      sha256sum -c "${COMPONENT}.tar.gz.sha256" ; \
-      tar -zxf "${COMPONENT}.tar.gz" -C /opt/vcnngr --strip-components=2 --no-same-owner ; \
-      rm -rf "${COMPONENT}".tar.gz{,.sha256} ; \
+      sha256sum -c "${BASENAME}.tar.gz.sha256" ; \
+      tar -zxf "${BASENAME}.tar.gz" -C /opt/vcnngr --strip-components=2 --no-same-owner ; \
+      rm -rf "${BASENAME}".tar.gz{,.sha256} ; \
     done
 RUN apt-get update && apt-get upgrade -y && \
     apt-get clean && rm -rf /var/lib/apt/lists /var/cache/apt/archives
