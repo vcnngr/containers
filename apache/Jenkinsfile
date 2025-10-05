@@ -70,6 +70,7 @@ spec:
         choice(name: 'BUILD_ARCH', choices: ['amd64', 'arm64'], description: 'Architecture')
         booleanParam(name: 'PUSH_TO_DOCKERHUB', defaultValue: false, description: 'Push to DockerHub')
         booleanParam(name: 'RUN_SECURITY_SCAN', defaultValue: true, description: 'Run security scan')
+        booleanParam(name: 'RUN_CODE_QUALITY', defaultValue: true, description: 'Run code quality checks (ShellCheck + SonarQube)')
         booleanParam(name: 'TAG_AS_LATEST', defaultValue: false, description: 'Tag as latest')
     }
     
