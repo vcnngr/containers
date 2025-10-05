@@ -26,8 +26,12 @@ for dir in "$DB_TMP_DIR" "$DB_LOGS_DIR" "$DB_CONF_DIR" "$DB_DEFAULT_CONF_DIR" "$
     chmod -R g+rwX "$dir"
 done
 
-# Fix to avoid issues detecting plugins in mariadb-install-db
-ln -sf "$DB_BASE_DIR/plugin" "$DB_BASE_DIR/lib/plugin"
+# Create plugin symlink only if plugin dir exists at root and not already in lib
+if [ -d "$DB_BASE_DIR/plugin" ] && [ ! -e "$DB_BASE_DIR/lib/plugin" ]; then
+    ln -sf "$DB_BASE_DIR/plugin" "$DB_BASE_DIR/lib/plugin"
+elif [ -d "$DB_BASE_DIR/lib/plugin" ]; then
+    echo "Plugin directory already exists in lib/, skipping symlink creation"
+fi
 
 # Redirect all logging to stdout
 ln -sf "/proc/1/fd/1" "$DB_LOGS_DIR/mysqld.log"
