@@ -51,6 +51,14 @@ spec:
     volumeMounts:
     - name: docker-sock
       mountPath: /var/run/docker.sock
+  - name: shellcheck
+    image: koalaman/shellcheck-alpine:latest
+    command: [cat]
+    tty: true
+  - name: sonar-scanner
+    image: sonarsource/sonar-scanner-cli:latest
+    command: [cat]
+    tty: true
 '''
         }
     }
@@ -62,6 +70,7 @@ spec:
         choice(name: 'BUILD_ARCH', choices: ['amd64', 'arm64'], description: 'Architecture')
         booleanParam(name: 'PUSH_TO_DOCKERHUB', defaultValue: false, description: 'Push to DockerHub')
         booleanParam(name: 'RUN_SECURITY_SCAN', defaultValue: true, description: 'Run security scan')
+        booleanParam(name: 'RUN_CODE_QUALITY', defaultValue: true, description: 'Run code quality checks (ShellCheck + SonarQube)')
         booleanParam(name: 'TAG_AS_LATEST', defaultValue: false, description: 'Tag as latest')
     }
     
@@ -137,6 +146,106 @@ ${params.TAG_AS_LATEST ? "• ${IMAGE_BASE}:latest" : ""}
                             echo "✓ rootfs directory exists"
                         fi
                     """
+                }
+            }
+        }
+        
+        stage('Code Quality') {
+            when {
+                expression { params.RUN_CODE_QUALITY }
+            }
+            parallel {
+                stage('Shellcheck') {
+                    steps {
+                        container('shellcheck') {
+                            script {
+                                try {
+                                    sh """
+                                        cd ${BUILD_CONTEXT}
+                                        SCRIPTS=\$(find . -type f -name '*.sh' 2>/dev/null || true)
+                                        if [ -n "\$SCRIPTS" ]; then
+                                            echo "\$SCRIPTS" | xargs shellcheck -f gcc --severity=warning || echo "Shellcheck warnings found"
+                                        else
+                                            echo "No shell scripts found"
+                                        fi
+                                    """
+                                } catch (Exception e) {
+                                    echo "Shellcheck failed: ${e.message}"
+                                }
+                            }
+                        }
+                    }
+                }
+                stage('SonarQube') {
+                    steps {
+                        container('sonar-scanner') {
+                            script {
+                                try {
+                                    withCredentials([string(credentialsId: 'sonarqube-token', variable: 'SONAR_TOKEN')]) {
+                                        sh """
+                                            cd ${BUILD_CONTEXT}
+                                            sonar-scanner \
+                                                -Dsonar.host.url=http://sonarqube-sonarqube.jenkins.svc.cluster.local:9000 \
+                                                -Dsonar.token=\${SONAR_TOKEN} \
+                                                -Dsonar.projectKey=vcnngr-${CONTAINER_NAME} \
+                                                -Dsonar.projectName='VCNNGR ${CONTAINER_NAME}' \
+                                                -Dsonar.projectVersion=${params.MARIADB_VERSION} \
+                                                -Dsonar.sources=. \
+                                                -Dsonar.exclusions='**/*.md'
+                                        """
+                                    }
+                                } catch (Exception e) {
+                                    echo "SonarQube failed: ${e.message}"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        stage('Quality Gate') {
+            when {
+                expression { params.RUN_CODE_QUALITY }
+            }
+            steps {
+                container('sonar-scanner') {
+                    script {
+                        try {
+                            withCredentials([string(credentialsId: 'sonarqube-token', variable: 'SONAR_TOKEN')]) {
+                                timeout(time: 5, unit: 'MINUTES') {
+                                    sh """
+                                        echo "Waiting for SonarQube Quality Gate..."
+                                        sleep 10
+                                        
+                                        # Get project status
+                                        RESPONSE=\$(curl -s -u \${SONAR_TOKEN}: \
+                                            "http://sonarqube-sonarqube.jenkins.svc.cluster.local:9000/api/qualitygates/project_status?projectKey=vcnngr-${CONTAINER_NAME}")
+                                        
+                                        echo "Quality Gate Response: \$RESPONSE"
+                                        
+                                        STATUS=\$(echo \$RESPONSE | grep -o '"status":"[^"]*"' | cut -d'"' -f4)
+                                        
+                                        echo "Quality Gate Status: \$STATUS"
+                                        
+                                        if [ "\$STATUS" = "OK" ]; then
+                                            echo "✓ Quality Gate PASSED"
+                                        elif [ "\$STATUS" = "ERROR" ]; then
+                                            echo "✗ Quality Gate FAILED"
+                                            echo "Check details at: http://sonarqube-sonarqube.jenkins.svc.cluster.local:9000/dashboard?id=vcnngr-${CONTAINER_NAME}"
+                                            exit 1
+                                        else
+                                            echo "⚠ Quality Gate status unknown or not computed yet"
+                                            echo "Status: \$STATUS"
+                                        fi
+                                    """
+                                }
+                            }
+                        } catch (Exception e) {
+                            echo "Quality Gate check failed: ${e.message}"
+                            echo "⚠ Continuing build despite Quality Gate failure"
+                        }
+                    }
                 }
             }
         }
