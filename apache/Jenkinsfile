@@ -361,16 +361,25 @@ ${params.TAG_AS_LATEST ? "• ${IMAGE_BASE}:latest" : ""}
                         echo "Test 5: Apache version check"
                         docker logs \$CONTAINER_ID | grep -q "Apache/2.4.65" && echo "✓ Apache 2.4.65 confirmed"
                         
-                        echo "Test 6: Verify binary architecture inside container"
-                        docker exec \$CONTAINER_ID file /opt/vcnngr/apache/bin/httpd
-                        
+                        echo "Test 6: Verify binary architecture and execution"
+                        # Verifica architettura
+                        CONTAINER_ARCH=\$(docker exec \$CONTAINER_ID uname -m)
+                        echo "Container architecture: \$CONTAINER_ARCH"
+
                         if [ "${params.BUILD_ARCH}" = "arm64" ]; then
-                            docker exec \$CONTAINER_ID file /opt/vcnngr/apache/bin/httpd | grep -q "ARM aarch64" && \
-                                echo "✓ Binary is correctly ARM64"
+                            [ "\$CONTAINER_ARCH" = "aarch64" ] && \
+                                echo "✓ Container is ARM64" || \
+                                echo "✗ Architecture mismatch"
                         else
-                            docker exec \$CONTAINER_ID file /opt/vcnngr/apache/bin/httpd | grep -q "x86-64" && \
-                                echo "✓ Binary is correctly AMD64"
+                            [ "\$CONTAINER_ARCH" = "x86_64" ] && \
+                                echo "✓ Container is AMD64" || \
+                                echo "✗ Architecture mismatch"
                         fi
+
+                        # Verifica che il binario sia eseguibile
+                        echo "Testing binary execution..."
+                        docker exec \$CONTAINER_ID /opt/vcnngr/apache/bin/httpd -v && \
+                            echo "✓ Apache binary works on \$CONTAINER_ARCH"
                         
                         # Cleanup
                         docker stop \$CONTAINER_ID
