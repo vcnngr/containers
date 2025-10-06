@@ -39,7 +39,7 @@ RUN --mount=type=secret,id=downloads_url \
         curl -SsLf "https://${DOWNLOADS_URL}/${COMPONENT}.tar.gz.sha256" -o "${BASENAME}.tar.gz.sha256" ; \
       fi ; \
       sha256sum -c "${BASENAME}.tar.gz.sha256" ; \
-      tar -zxf "${BASENAME}.tar.gz" -C /opt/vcnngr --strip-components=2 --no-same-owner ; \
+      tar -zxf "${BASENAME}.tar.gz" -C /opt/vcnngr --strip-components=1 --no-same-owner ; \
       rm -rf "${BASENAME}".tar.gz{,.sha256} ; \
     done
 RUN apt-get update && apt-get upgrade -y && \
