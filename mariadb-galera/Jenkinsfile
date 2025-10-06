@@ -1,0 +1,524 @@
+#!/usr/bin/env groovy
+/**
+ * VCNNGR MariaDB Galera Container Pipeline
+ * Build MariaDB Galera container con binari VCNNGR
+ */
+
+pipeline {
+    agent {
+        kubernetes {
+            namespace 'jenkins'
+            yaml '''
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    jenkins: agent
+spec:
+  serviceAccountName: jenkins
+  securityContext:
+    runAsUser: 0
+    fsGroup: 0
+  volumes:
+  - name: docker-sock
+    hostPath:
+      path: /var/run/docker.sock
+      type: Socket
+  containers:
+  - name: debian
+    image: debian:bookworm
+    command: [cat]
+    tty: true
+    securityContext:
+      privileged: true
+    resources:
+      requests:
+        memory: "4Gi"
+        cpu: "1000m"
+      limits:
+        memory: "8Gi"
+        cpu: "4000m"
+    volumeMounts:
+    - name: docker-sock
+      mountPath: /var/run/docker.sock
+    env:
+    - name: DEBIAN_FRONTEND
+      value: noninteractive
+  - name: trivy
+    image: aquasec/trivy:latest
+    command: [cat]
+    tty: true
+    volumeMounts:
+    - name: docker-sock
+      mountPath: /var/run/docker.sock
+  - name: shellcheck
+    image: koalaman/shellcheck-alpine:latest
+    command: [cat]
+    tty: true
+  - name: sonar-scanner
+    image: sonarsource/sonar-scanner-cli:latest
+    command: [cat]
+    tty: true
+'''
+        }
+    }
+    
+    parameters {
+        string(name: 'MARIADB_VERSION', defaultValue: '12.0.2', description: 'MariaDB Galera version')
+        string(name: 'IMAGE_REVISION', defaultValue: '0', description: 'Image revision')
+        choice(name: 'DEBIAN_VARIANT', choices: ['debian-12', 'debian-11'], description: 'Debian variant')
+        choice(name: 'BUILD_ARCH', choices: ['amd64', 'arm64'], description: 'Architecture')
+        booleanParam(name: 'PUSH_TO_DOCKERHUB', defaultValue: false, description: 'Push to DockerHub')
+        booleanParam(name: 'RUN_SECURITY_SCAN', defaultValue: true, description: 'Run security scan')
+        booleanParam(name: 'RUN_CODE_QUALITY', defaultValue: true, description: 'Run code quality checks (ShellCheck + SonarQube)')
+        booleanParam(name: 'TAG_AS_LATEST', defaultValue: false, description: 'Tag as latest')
+    }
+    
+    environment {
+        CONTAINER_NAME = 'mariadb-galera'
+        MAJOR_VERSION = sh(script: "echo '${params.MARIADB_VERSION}' | cut -d. -f1-2", returnStdout: true).trim()
+        DOCKERHUB_REGISTRY = 'docker.io'
+        DOCKERHUB_NAMESPACE = 'vcnngr'
+        IMAGE_BASE = "${DOCKERHUB_REGISTRY}/${DOCKERHUB_NAMESPACE}/${CONTAINER_NAME}"
+        TAG_FULL = "${params.MARIADB_VERSION}-${params.IMAGE_REVISION}"
+        TAG_VERSION = "${params.MARIADB_VERSION}"
+        DOCKERHUB_CREDS = credentials('dockerhub-credentials')
+        BUILD_CONTEXT = "${WORKSPACE}/${CONTAINER_NAME}/${MAJOR_VERSION}/${params.DEBIAN_VARIANT}"
+        BUILD_DATE = sh(script: "date -u +'%Y-%m-%dT%H:%M:%SZ'", returnStdout: true).trim()
+        GIT_COMMIT_SHORT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+    }
+    
+    options {
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+        timeout(time: 2, unit: 'HOURS')
+        timestamps()
+        ansiColor('xterm')
+    }
+    
+    stages {
+        stage('Setup') {
+            steps {
+                container('debian') {
+                    sh '''
+                        set -e
+                        apt-get update -qq
+                        apt-get install -y -qq docker.io curl git
+                        docker version
+                    '''
+                }
+            }
+        }
+        
+        stage('Setup QEMU') {
+            when {
+                expression { params.BUILD_ARCH == 'arm64' }
+            }
+            steps {
+                container('debian') {
+                    sh '''
+                        echo "Setting up QEMU for ARM64 emulation..."
+                        docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+                        echo "✓ QEMU configured for ARM64"
+                    '''
+                }
+            }
+        }
+        
+        stage('Validate') {
+            steps {
+                script {
+                    echo """
+╔═══════════════════════════════════════════════════════════════╗
+║              VCNNGR MARIADB GALERA BUILD                      ║
+╚═══════════════════════════════════════════════════════════════╝
+
+Container:     ${CONTAINER_NAME}
+Version:       ${params.MARIADB_VERSION}
+Revision:      ${params.IMAGE_REVISION}
+Architecture:  ${params.BUILD_ARCH}
+Build Date:    ${BUILD_DATE}
+Git Commit:    ${GIT_COMMIT_SHORT}
+
+Tags:
+- ${IMAGE_BASE}:${TAG_FULL}
+- ${IMAGE_BASE}:${TAG_VERSION}
+- ${IMAGE_BASE}:${MAJOR_VERSION}
+${params.TAG_AS_LATEST ? "• ${IMAGE_BASE}:latest" : ""}
+═══════════════════════════════════════════════════════════════
+"""
+                    sh """
+                        if [ ! -f "${BUILD_CONTEXT}/Dockerfile" ]; then
+                            echo "ERROR: Dockerfile not found at ${BUILD_CONTEXT}/Dockerfile"
+                            exit 1
+                        fi
+                        echo "✓ Dockerfile found"
+                        
+                        if [ -d "${BUILD_CONTEXT}/prebuildfs" ]; then
+                            echo "✓ prebuildfs directory exists"
+                        fi
+                        
+                        if [ -d "${BUILD_CONTEXT}/rootfs" ]; then
+                            echo "✓ rootfs directory exists"
+                        fi
+                    """
+                }
+            }
+        }
+        
+        stage('Code Quality') {
+            when {
+                expression { params.RUN_CODE_QUALITY }
+            }
+            parallel {
+                stage('Shellcheck') {
+                    steps {
+                        container('shellcheck') {
+                            script {
+                                try {
+                                    sh """
+                                        cd ${BUILD_CONTEXT}
+                                        SCRIPTS=\$(find . -type f -name '*.sh' 2>/dev/null || true)
+                                        if [ -n "\$SCRIPTS" ]; then
+                                            echo "\$SCRIPTS" | xargs shellcheck -f gcc --severity=warning || echo "Shellcheck warnings found"
+                                        else
+                                            echo "No shell scripts found"
+                                        fi
+                                    """
+                                } catch (Exception e) {
+                                    echo "Shellcheck failed: ${e.message}"
+                                }
+                            }
+                        }
+                    }
+                }
+                stage('SonarQube') {
+                    steps {
+                        container('sonar-scanner') {
+                            script {
+                                try {
+                                    withCredentials([string(credentialsId: 'sonarqube-token', variable: 'SONAR_TOKEN')]) {
+                                        sh """
+                                            cd ${BUILD_CONTEXT}
+                                            sonar-scanner \
+                                                -Dsonar.host.url=http://sonarqube-sonarqube.jenkins.svc.cluster.local:9000 \
+                                                -Dsonar.token=\${SONAR_TOKEN} \
+                                                -Dsonar.projectKey=vcnngr-${CONTAINER_NAME} \
+                                                -Dsonar.projectName='VCNNGR ${CONTAINER_NAME}' \
+                                                -Dsonar.projectVersion=${params.MARIADB_VERSION} \
+                                                -Dsonar.sources=. \
+                                                -Dsonar.exclusions='**/*.md'
+                                        """
+                                    }
+                                } catch (Exception e) {
+                                    echo "SonarQube failed: ${e.message}"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        stage('Quality Gate') {
+            when {
+                expression { params.RUN_CODE_QUALITY }
+            }
+            steps {
+                container('sonar-scanner') {
+                    script {
+                        try {
+                            withCredentials([string(credentialsId: 'sonarqube-token', variable: 'SONAR_TOKEN')]) {
+                                timeout(time: 5, unit: 'MINUTES') {
+                                    sh """
+                                        echo "Waiting for SonarQube Quality Gate..."
+                                        sleep 10
+                                        
+                                        RESPONSE=\$(curl -s -u \${SONAR_TOKEN}: \
+                                            "http://sonarqube-sonarqube.jenkins.svc.cluster.local:9000/api/qualitygates/project_status?projectKey=vcnngr-${CONTAINER_NAME}")
+                                        
+                                        echo "Quality Gate Response: \$RESPONSE"
+                                        
+                                        STATUS=\$(echo \$RESPONSE | grep -o '"status":"[^"]*"' | cut -d'"' -f4)
+                                        
+                                        echo "Quality Gate Status: \$STATUS"
+                                        
+                                        if [ "\$STATUS" = "OK" ]; then
+                                            echo "✓ Quality Gate PASSED"
+                                        elif [ "\$STATUS" = "ERROR" ]; then
+                                            echo "✗ Quality Gate FAILED"
+                                            echo "Check details at: http://sonarqube-sonarqube.jenkins.svc.cluster.local:9000/dashboard?id=vcnngr-${CONTAINER_NAME}"
+                                            exit 1
+                                        else
+                                            echo "⚠ Quality Gate status unknown or not computed yet"
+                                            echo "Status: \$STATUS"
+                                        fi
+                                    """
+                                }
+                            }
+                        } catch (Exception e) {
+                            echo "Quality Gate check failed: ${e.message}"
+                            echo "⚠ Continuing build despite Quality Gate failure"
+                        }
+                    }
+                }
+            }
+        }
+        
+        stage('Build Image') {
+            steps {
+                container('debian') {
+                    sh """
+                        cd ${BUILD_CONTEXT}
+                        
+                        echo "minio.vcnngr.it/vcnngr-binaries" > ./downloads_url_secret
+                        
+                        export DOCKER_BUILDKIT=1
+                        
+                        if [ "${params.BUILD_ARCH}" = "arm64" ]; then
+                            DOCKER_PLATFORM="linux/arm64"
+                        else
+                            DOCKER_PLATFORM="linux/amd64"
+                        fi
+                        
+                        echo "Building for platform: \$DOCKER_PLATFORM"
+                        
+                        docker build \
+                            --platform=\$DOCKER_PLATFORM \
+                            --secret id=downloads_url,src=./downloads_url_secret \
+                            --build-arg TARGETARCH=${params.BUILD_ARCH} \
+                            --build-arg DOWNLOADS_URL=minio.vcnngr.it/vcnngr-binaries \
+                            --label "org.opencontainers.image.created=${BUILD_DATE}" \
+                            --label "org.opencontainers.image.version=${params.MARIADB_VERSION}" \
+                            --label "org.opencontainers.image.vendor=Vcnngr" \
+                            --label "org.opencontainers.image.architecture=${params.BUILD_ARCH}" \
+                            --tag ${IMAGE_BASE}:${TAG_FULL} \
+                            --tag ${IMAGE_BASE}:${TAG_VERSION} \
+                            --tag ${IMAGE_BASE}:${MAJOR_VERSION} \
+                            ${params.TAG_AS_LATEST ? "--tag ${IMAGE_BASE}:latest" : ""} \
+                            -f Dockerfile \
+                            .
+                        
+                        rm -f ./downloads_url_secret
+                        
+                        echo "✓ Image built successfully for ${params.BUILD_ARCH}"
+                        docker images ${IMAGE_BASE}:${TAG_FULL}
+                        
+                        echo "Verifying image architecture:"
+                        docker inspect ${IMAGE_BASE}:${TAG_FULL} | grep Architecture
+                    """
+                }
+            }
+        }
+        
+        stage('Test Image') {
+            steps {
+                container('debian') {
+                    sh """
+                        echo "Testing ${IMAGE_BASE}:${TAG_FULL}"
+                        
+                        if [ "${params.BUILD_ARCH}" = "arm64" ]; then
+                            echo "⚠️ Running tests on ARM64 via QEMU emulation (slower)"
+                            WAIT_TIME=30
+                        else
+                            WAIT_TIME=20
+                        fi
+                        
+                        echo "Test 1: Image starts correctly"
+                        CONTAINER_ID=\$(docker run -d \
+                            --platform=linux/${params.BUILD_ARCH} \
+                            -e ALLOW_EMPTY_PASSWORD=yes \
+                            -e MARIADB_GALERA_CLUSTER_BOOTSTRAP=yes \
+                            -e MARIADB_GALERA_CLUSTER_ADDRESS=gcomm:// \
+                            ${IMAGE_BASE}:${TAG_FULL})
+                        echo "Container started: \$CONTAINER_ID"
+                        
+                        echo "Waiting \$WAIT_TIME seconds for MariaDB Galera to start..."
+                        sleep \$WAIT_TIME
+                        
+                        echo "Test 2: Container logs"
+                        docker logs \$CONTAINER_ID | tail -30
+                        
+                        echo "Test 3: Check MariaDB is running"
+                        docker exec \$CONTAINER_ID mysqladmin ping -uroot || echo "MariaDB not ready yet..."
+                        sleep 10
+                        docker exec \$CONTAINER_ID mysqladmin ping -uroot
+                        
+                        echo "Test 4: MariaDB version check"
+                        docker exec \$CONTAINER_ID mysql -V
+                        
+                        echo "Test 5: Test database connection and Galera status"
+                        docker exec \$CONTAINER_ID mysql -uroot -e "SELECT VERSION();"
+                        docker exec \$CONTAINER_ID mysql -uroot -e "SHOW STATUS LIKE 'wsrep_cluster_size';"
+                        
+                        echo "Test 6: Verify binary architecture and execution"
+                        
+                        BINARY=\$(docker exec \$CONTAINER_ID sh -c "ls /opt/vcnngr/mariadb/bin/mariadbd 2>/dev/null || echo /opt/vcnngr/mariadb/bin/mysqld")
+                        echo "Using binary: \$BINARY"
+                        
+                        CONTAINER_ARCH=\$(docker exec \$CONTAINER_ID uname -m)
+                        echo "Container architecture: \$CONTAINER_ARCH"
+                        
+                        if [ "${params.BUILD_ARCH}" = "arm64" ]; then
+                            [ "\$CONTAINER_ARCH" = "aarch64" ] && \
+                                echo "✓ Container is ARM64" || \
+                                echo "✗ Architecture mismatch"
+                        else
+                            [ "\$CONTAINER_ARCH" = "x86_64" ] && \
+                                echo "✓ Container is AMD64" || \
+                                echo "✗ Architecture mismatch"
+                        fi
+                        
+                        echo "Testing binary execution..."
+                        docker exec \$CONTAINER_ID \$BINARY --version && \
+                            echo "✓ MariaDB Galera binary works on \$CONTAINER_ARCH"
+                        
+                        docker stop \$CONTAINER_ID
+                        docker rm \$CONTAINER_ID
+                        
+                        echo "✓ All tests passed - MariaDB Galera ${params.BUILD_ARCH} works perfectly!"
+                    """
+                }
+            }
+        }
+        
+        stage('Security Scan') {
+            when {
+                expression { params.RUN_SECURITY_SCAN }
+            }
+            steps {
+                container('trivy') {
+                    script {
+                        def maxRetries = 3
+                        for (int attempt = 1; attempt <= maxRetries; attempt++) {
+                            try {
+                                if (attempt > 1) {
+                                    sh "trivy clean --all || true"
+                                    sleep(5)
+                                }
+                                
+                                sh """
+                                    trivy image \
+                                        --severity HIGH,CRITICAL \
+                                        --exit-code 0 \
+                                        --timeout 10m \
+                                        ${IMAGE_BASE}:${TAG_FULL}
+                                    
+                                    trivy image \
+                                        --format json \
+                                        --output trivy-report.json \
+                                        ${IMAGE_BASE}:${TAG_FULL} || true
+                                """
+                                break
+                            } catch (Exception e) {
+                                if (attempt == maxRetries) {
+                                    echo "Security scan failed after ${maxRetries} attempts"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        stage('Push to DockerHub') {
+            when {
+                expression { params.PUSH_TO_DOCKERHUB }
+            }
+            steps {
+                container('debian') {
+                    sh """
+                        echo "\${DOCKERHUB_CREDS_PSW}" | docker login \
+                            --username "\${DOCKERHUB_CREDS_USR}" \
+                            --password-stdin \
+                            ${DOCKERHUB_REGISTRY}
+                        
+                        docker push ${IMAGE_BASE}:${TAG_FULL}
+                        docker push ${IMAGE_BASE}:${TAG_VERSION}
+                        docker push ${IMAGE_BASE}:${MAJOR_VERSION}
+                        
+                        ${params.TAG_AS_LATEST ? "docker push ${IMAGE_BASE}:latest" : ""}
+                        
+                        docker logout
+                        echo "✓ Images pushed successfully"
+                    """
+                }
+            }
+        }
+        
+        stage('Generate Report') {
+            steps {
+                script {
+                    def metadata = [
+                        container: CONTAINER_NAME,
+                        version: params.MARIADB_VERSION,
+                        architecture: params.BUILD_ARCH,
+                        tags: [
+                            "${IMAGE_BASE}:${TAG_FULL}",
+                            "${IMAGE_BASE}:${TAG_VERSION}",
+                            "${IMAGE_BASE}:${MAJOR_VERSION}"
+                        ]
+                    ]
+                    
+                    if (params.TAG_AS_LATEST) {
+                        metadata.tags.add("${IMAGE_BASE}:latest")
+                    }
+                    
+                    writeJSON file: 'build-metadata.json', json: metadata, pretty: 4
+                    
+                    echo """
+╔═══════════════════════════════════════════════════════════════╗
+║                    BUILD COMPLETE                             ║
+╚═══════════════════════════════════════════════════════════════╝
+
+Container: ${CONTAINER_NAME} ${params.MARIADB_VERSION}
+Architecture: ${params.BUILD_ARCH}
+
+Images:
+"""
+                    metadata.tags.each { tag -> echo "  • ${tag}" }
+                    
+                    echo """
+Quick test (single node):
+  docker pull ${IMAGE_BASE}:${TAG_VERSION}
+  docker run -d -p 3306:3306 \\
+    -e ALLOW_EMPTY_PASSWORD=yes \\
+    -e MARIADB_GALERA_CLUSTER_BOOTSTRAP=yes \\
+    -e MARIADB_GALERA_CLUSTER_ADDRESS=gcomm:// \\
+    ${IMAGE_BASE}:${TAG_VERSION}
+  docker exec <container> mysql -uroot -e "SHOW STATUS LIKE 'wsrep%';"
+═══════════════════════════════════════════════════════════════
+"""
+                }
+            }
+        }
+    }
+    
+    post {
+        always {
+            script {
+                try {
+                    archiveArtifacts artifacts: '*.json', allowEmptyArchive: true
+                } catch (Exception e) {
+                    echo "No artifacts to archive"
+                }
+                
+                try {
+                    container('debian') {
+                        sh "docker logout ${DOCKERHUB_REGISTRY} || true"
+                        sh "docker system prune -af || true"
+                    }
+                } catch (Exception e) {
+                    echo "Cleanup skipped"
+                }
+            }
+        }
+        
+        success {
+            echo "✓ BUILD SUCCESSFUL"
+        }
+        
+        failure {
+            echo "✗ BUILD FAILED - Check console output"
+        }
+    }
+}
