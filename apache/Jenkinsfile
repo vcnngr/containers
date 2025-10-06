@@ -362,13 +362,13 @@ ${params.TAG_AS_LATEST ? "• ${IMAGE_BASE}:latest" : ""}
                         docker logs \$CONTAINER_ID | grep -q "Apache/2.4.65" && echo "✓ Apache 2.4.65 confirmed"
                         
                         echo "Test 6: Verify binary architecture inside container"
-                        docker exec \$CONTAINER_ID file /opt/bitnami/apache/bin/httpd
+                        docker exec \$CONTAINER_ID file /opt/vcnngr/apache/bin/httpd
                         
                         if [ "${params.BUILD_ARCH}" = "arm64" ]; then
-                            docker exec \$CONTAINER_ID file /opt/bitnami/apache/bin/httpd | grep -q "ARM aarch64" && \
+                            docker exec \$CONTAINER_ID file /opt/vcnngr/apache/bin/httpd | grep -q "ARM aarch64" && \
                                 echo "✓ Binary is correctly ARM64"
                         else
-                            docker exec \$CONTAINER_ID file /opt/bitnami/apache/bin/httpd | grep -q "x86-64" && \
+                            docker exec \$CONTAINER_ID file /opt/vcnngr/apache/bin/httpd | grep -q "x86-64" && \
                                 echo "✓ Binary is correctly AMD64"
                         fi
                         
