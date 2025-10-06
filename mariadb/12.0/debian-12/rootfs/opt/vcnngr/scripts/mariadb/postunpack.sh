@@ -21,7 +21,7 @@ info "Configuring default MariaDB options"
 ensure_dir_exists "$DB_CONF_DIR"
 mariadb_create_default_config
 
-for dir in "$DB_TMP_DIR" "$DB_LOGS_DIR" "$DB_CONF_DIR" "$DB_DEFAULT_CONF_DIR" "${DB_CONF_DIR}/bitnami" "$DB_VOLUME_DIR" "$DB_DATA_DIR"; do
+for dir in "$DB_TMP_DIR" "$DB_LOGS_DIR" "$DB_CONF_DIR" "$DB_DEFAULT_CONF_DIR" "${DB_CONF_DIR}/vcnngr" "$DB_VOLUME_DIR" "$DB_DATA_DIR"; do
     ensure_dir_exists "$dir"
     chmod -R g+rwX "$dir"
 done

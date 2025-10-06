@@ -10,7 +10,7 @@ set -o pipefail
 # set -o xtrace # Uncomment this line for debugging purposes
 
 # Load libraries
-. /opt/vcnngr/scripts/libbitnami.sh
+. /opt/vcnngr/scripts/libvcnngr.sh
 . /opt/vcnngr/scripts/libmariadbgalera.sh
 
 # Load MariaDB environment variables
