@@ -79,7 +79,8 @@ spec:
     
     environment {
         CONTAINER_NAME = 'wordpress'
-        MAJOR_VERSION = sh(script: "echo '${params.WORDPRESS_VERSION}' | cut -d. -f1-2", returnStdout: true).trim()
+        // WordPress usa solo major version nel path (6 invece di 6.8)
+        MAJOR_VERSION = sh(script: "echo '${params.WORDPRESS_VERSION}' | cut -d. -f1", returnStdout: true).trim()
         DOCKERHUB_REGISTRY = 'docker.io'
         DOCKERHUB_NAMESPACE = 'vcnngr'
         IMAGE_BASE = "${DOCKERHUB_REGISTRY}/${DOCKERHUB_NAMESPACE}/${CONTAINER_NAME}"
