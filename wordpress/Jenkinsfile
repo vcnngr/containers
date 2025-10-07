@@ -1,0 +1,343 @@
+#!/usr/bin/env groovy
+/**
+ * VCNNGR WordPress Package Builder
+ * Crea il package WordPress pronto per deployment
+ */
+
+pipeline {
+    agent {
+        kubernetes {
+            namespace 'jenkins'
+            yaml '''
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    jenkins: agent
+spec:
+  serviceAccountName: jenkins
+  containers:
+  - name: builder
+    image: debian:bookworm
+    command: [cat]
+    tty: true
+    resources:
+      requests:
+        memory: "2Gi"
+        cpu: "500m"
+      limits:
+        memory: "4Gi"
+        cpu: "2000m"
+'''
+        }
+    }
+    
+    parameters {
+        string(name: 'WORDPRESS_VERSION', defaultValue: '6.8.3', description: 'WordPress version')
+        string(name: 'REVISION', defaultValue: '0', description: 'Build revision')
+        choice(name: 'ARCH', choices: ['amd64', 'arm64'], description: 'Architecture (WordPress is arch-independent)')
+        choice(name: 'DEBIAN_VERSION', choices: ['debian-12', 'debian-11'], description: 'Debian version')
+        booleanParam(name: 'UPLOAD_TO_MINIO', defaultValue: true, description: 'Upload to MinIO')
+    }
+    
+    environment {
+        MINIO_BUCKET = 'vcnngr-binaries'
+        MINIO_PREFIX = 'wordpress'
+        MINIO_ENDPOINT = 'http://minio.minio-system.svc.cluster.local:9000'
+        MINIO_PUBLIC_URL = 'minio.vcnngr.it'
+        BUILD_DATE = sh(script: "date -u +'%Y%m%d'", returnStdout: true).trim()
+    }
+    
+    stages {
+        stage('Setup') {
+            steps {
+                container('builder') {
+                    sh '''
+                        apt-get update
+                        apt-get install -y wget curl tar gzip python3-pip
+                        pip3 install awscli --break-system-packages
+                    '''
+                }
+            }
+        }
+        
+        stage('Download WordPress') {
+            steps {
+                container('builder') {
+                    sh """
+                        mkdir -p /tmp/wordpress_build
+                        cd /tmp/wordpress_build
+                        
+                        echo "=== Downloading WordPress ${params.WORDPRESS_VERSION} ==="
+                        wget -q https://wordpress.org/wordpress-${params.WORDPRESS_VERSION}.tar.gz
+                        
+                        echo "=== Extracting WordPress ==="
+                        tar -xzf wordpress-${params.WORDPRESS_VERSION}.tar.gz
+                        
+                        echo "✓ WordPress extracted"
+                        ls -la wordpress/
+                    """
+                }
+            }
+        }
+        
+        stage('Download WP-CLI') {
+            steps {
+                container('builder') {
+                    sh '''
+                        cd /tmp/wordpress_build
+                        
+                        echo "=== Downloading WP-CLI ==="
+                        mkdir -p wp-cli/bin
+                        
+                        # Download WP-CLI phar
+                        wget -q https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar -O wp-cli/bin/wp
+                        chmod +x wp-cli/bin/wp
+                        
+                        echo "✓ WP-CLI downloaded"
+                        wp-cli/bin/wp --version
+                    '''
+                }
+            }
+        }
+        
+        stage('Create VCNNGR Structure') {
+            steps {
+                container('builder') {
+                    sh '''
+                        cd /tmp/wordpress_build
+                        
+                        echo "=== Creating VCNNGR package structure ==="
+                        mkdir -p package/files/wordpress
+                        mkdir -p package/files/wp-cli
+                        
+                        # Copia WordPress core
+                        cp -r wordpress/* package/files/wordpress/
+                        
+                        # Copia WP-CLI
+                        cp -r wp-cli/* package/files/wp-cli/
+                        
+                        # Crea directory per uploads e cache
+                        mkdir -p package/files/wordpress/wp-content/uploads
+                        mkdir -p package/files/wordpress/wp-content/cache
+                        
+                        echo "✓ Package structure created"
+                        
+                        echo ""
+                        echo "=== Package contents ==="
+                        du -sh package/files/wordpress/
+                        du -sh package/files/wp-cli/
+                    '''
+                }
+            }
+        }
+        
+        stage('Add WordPress Metadata') {
+            steps {
+                container('builder') {
+                    sh '''
+                        cd /tmp/wordpress_build/package/files/wordpress
+                        
+                        echo "=== Creating WordPress metadata ==="
+                        
+                        # Crea .vcnngr file con info versione
+                        cat > .vcnngr << EOF
+WORDPRESS_VERSION=${WORDPRESS_VERSION}
+BUILD_DATE=${BUILD_DATE}
+BUILD_ARCH=${ARCH}
+BUILD_OS=${DEBIAN_VERSION}
+PACKAGER=VCNNGR
+PREFIX=/opt/vcnngr/wordpress
+EOF
+                        
+                        # Lista plugin/temi installati di default
+                        echo "Default themes:"
+                        ls -1 wp-content/themes/
+                        
+                        echo ""
+                        echo "Default plugins:"
+                        ls -1 wp-content/plugins/ 2>/dev/null || echo "No default plugins"
+                    '''
+                }
+            }
+        }
+        
+        stage('Create Tarball') {
+            steps {
+                container('builder') {
+                    sh """
+                        cd /tmp/wordpress_build/package
+                        
+                        cat > COPYING << 'EOF'
+WordPress ${params.WORDPRESS_VERSION}
+Packaged by VCNNGR on ${BUILD_DATE}
+Prefix: /opt/vcnngr/wordpress
+WP-CLI: Included at /opt/vcnngr/wp-cli
+Architecture: ${params.ARCH} (PHP application - arch independent)
+Debian: ${params.DEBIAN_VERSION}
+Source: https://wordpress.org/wordpress-${params.WORDPRESS_VERSION}.tar.gz
+
+This package contains:
+- WordPress ${params.WORDPRESS_VERSION} core files
+- WP-CLI command line tool
+- Default themes (Twenty Twenty-Four, etc.)
+- Empty wp-content structure for customization
+
+Installation:
+Extract to /opt/vcnngr/ and configure with Apache + PHP
+EOF
+                        
+                        echo "=== Creating tarball ==="
+                        tar -czf /tmp/wordpress-${params.WORDPRESS_VERSION}-${params.REVISION}-linux-${params.ARCH}-${params.DEBIAN_VERSION}.tar.gz \
+                            files/ COPYING
+                        
+                        sha256sum /tmp/wordpress-${params.WORDPRESS_VERSION}-${params.REVISION}-linux-${params.ARCH}-${params.DEBIAN_VERSION}.tar.gz > \
+                            /tmp/wordpress-${params.WORDPRESS_VERSION}-${params.REVISION}-linux-${params.ARCH}-${params.DEBIAN_VERSION}.tar.gz.sha256
+                        
+                        echo ""
+                        echo "=== Final tarball ==="
+                        ls -lh /tmp/wordpress-${params.WORDPRESS_VERSION}-${params.REVISION}-linux-${params.ARCH}-${params.DEBIAN_VERSION}.tar.gz
+                        
+                        cp /tmp/wordpress-${params.WORDPRESS_VERSION}-${params.REVISION}-linux-${params.ARCH}-${params.DEBIAN_VERSION}.tar.gz* \${WORKSPACE}/
+                    """
+                }
+            }
+        }
+        
+        stage('Verify Tarball') {
+            steps {
+                container('builder') {
+                    sh """
+                        cd \${WORKSPACE}
+                        
+                        TARBALL="wordpress-${params.WORDPRESS_VERSION}-${params.REVISION}-linux-${params.ARCH}-${params.DEBIAN_VERSION}.tar.gz"
+                        
+                        echo "=== Verifying checksum ==="
+                        sha256sum -c "\${TARBALL}.sha256"
+                        
+                        echo ""
+                        echo "=== Verifying structure ==="
+                        tar -tzf "\$TARBALL" | grep "^files/wordpress/" | head -30
+                        
+                        echo ""
+                        echo "=== Checking critical files ==="
+                        
+                        if tar -tzf "\$TARBALL" | grep -q "files/wordpress/index.php\$"; then
+                            echo "✓ WordPress index.php found"
+                        else
+                            echo "✗ ERROR: index.php not found"
+                            exit 1
+                        fi
+                        
+                        if tar -tzf "\$TARBALL" | grep -q "files/wordpress/wp-config-sample.php\$"; then
+                            echo "✓ wp-config-sample.php found"
+                        else
+                            echo "✗ ERROR: wp-config-sample.php not found"
+                            exit 1
+                        fi
+                        
+                        if tar -tzf "\$TARBALL" | grep -q "files/wp-cli/bin/wp\$"; then
+                            echo "✓ WP-CLI found"
+                        else
+                            echo "⚠ WARNING: WP-CLI not found"
+                        fi
+                        
+                        echo ""
+                        echo "=== Package contents summary ==="
+                        echo "Total files:"
+                        tar -tzf "\$TARBALL" | wc -l
+                        
+                        echo ""
+                        echo "WordPress core files:"
+                        tar -tzf "\$TARBALL" | grep "files/wordpress/" | wc -l
+                        
+                        echo ""
+                        echo "WP-CLI files:"
+                        tar -tzf "\$TARBALL" | grep "files/wp-cli/" | wc -l
+                    """
+                }
+            }
+        }
+        
+        stage('Upload to MinIO') {
+            when {
+                expression { params.UPLOAD_TO_MINIO }
+            }
+            steps {
+                container('builder') {
+                    withCredentials([usernamePassword(
+                        credentialsId: 'minio-credentials',
+                        usernameVariable: 'ACCESS_KEY_ID',
+                        passwordVariable: 'SECRET_ACCESS_KEY'
+                    )]) {
+                        sh """
+                            export AWS_ACCESS_KEY_ID=\${ACCESS_KEY_ID}
+                            export AWS_SECRET_ACCESS_KEY=\${SECRET_ACCESS_KEY}
+                            
+                            cd \${WORKSPACE}
+                            
+                            echo "=== Uploading to MinIO ==="
+                            
+                            aws s3 cp \
+                                wordpress-${params.WORDPRESS_VERSION}-${params.REVISION}-linux-${params.ARCH}-${params.DEBIAN_VERSION}.tar.gz \
+                                s3://${MINIO_BUCKET}/${MINIO_PREFIX}/ \
+                                --endpoint-url=${MINIO_ENDPOINT}
+                            
+                            aws s3 cp \
+                                wordpress-${params.WORDPRESS_VERSION}-${params.REVISION}-linux-${params.ARCH}-${params.DEBIAN_VERSION}.tar.gz.sha256 \
+                                s3://${MINIO_BUCKET}/${MINIO_PREFIX}/ \
+                                --endpoint-url=${MINIO_ENDPOINT}
+                            
+                            echo ""
+                            echo "✓ Uploaded to MinIO successfully"
+                        """
+                    }
+                }
+            }
+        }
+        
+        stage('Archive') {
+            steps {
+                archiveArtifacts artifacts: '*.tar.gz*', allowEmptyArchive: true
+            }
+        }
+    }
+    
+    post {
+        success {
+            echo """
+╔═══════════════════════════════════════════╗
+║   WORDPRESS PACKAGE BUILD SUCCESSFUL      ║
+╚═══════════════════════════════════════════╝
+
+Version: WordPress ${params.WORDPRESS_VERSION}
+Architecture: ${params.ARCH} (arch-independent PHP app)
+
+Download URL:
+https://${MINIO_PUBLIC_URL}/${MINIO_BUCKET}/${MINIO_PREFIX}/wordpress-${params.WORDPRESS_VERSION}-${params.REVISION}-linux-${params.ARCH}-${params.DEBIAN_VERSION}.tar.gz
+
+Package Contents:
+✓ WordPress ${params.WORDPRESS_VERSION} core
+✓ WP-CLI command line tool
+✓ Default themes
+✓ Ready for /opt/vcnngr/wordpress deployment
+
+Next Steps:
+1. Verify all components on MinIO:
+   - render-template
+   - php-8.2.29-10
+   - apache-2.4.65-1
+   - mysql-client-12.0.2-0
+   - libphp-8.2.29-6
+   - wordpress-6.8.3-0
+2. Update Dockerfile to use VCNNGR MinIO URL
+3. Build Docker image
+4. Test deployment
+"""
+        }
+        
+        failure {
+            echo "✗ BUILD FAILED - Check console output"
+        }
+    }
+}
