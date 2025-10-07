@@ -307,57 +307,49 @@ ${params.TAG_AS_LATEST ? "• ${IMAGE_BASE}:latest" : ""}
                     sh """
                         echo "Testing ${IMAGE_BASE}:${TAG_FULL}"
                         
-                        WAIT_TIME=20
-                        
                         echo "Test 1: Image starts correctly"
-                        CONTAINER_ID=\$(docker run -d \
-                            --platform=linux/${params.BUILD_ARCH} \
-                            -e ALLOW_EMPTY_PASSWORD=yes \
+                        CONTAINER_ID=\$(docker run -d \\
+                            --platform=linux/${params.BUILD_ARCH} \\
+                            -e ALLOW_EMPTY_PASSWORD=yes \\
                             ${IMAGE_BASE}:${TAG_FULL})
-                        echo "Container started: \$CONTAINER_ID"
                         
-                        # Aspetta che MariaDB sia pronto
-                        echo "Waiting \$WAIT_TIME seconds for MariaDB to start..."
-                        sleep \$WAIT_TIME
+                        echo "Container: \$CONTAINER_ID"
+                        
+                        # Aspetta che MariaDB sia pronto guardando i log
+                        echo "Waiting for MariaDB to be ready..."
+                        TIMEOUT=60
+                        ELAPSED=0
+                        
+                        while [ \$ELAPSED -lt \$TIMEOUT ]; do
+                            if docker logs \$CONTAINER_ID 2>&1 | grep -q "ready for connections"; then
+                                echo "✓ MariaDB ready after \${ELAPSED}s"
+                                break
+                            fi
+                            sleep 2
+                            ELAPSED=\$((ELAPSED + 2))
+                        done
+                        
+                        if [ \$ELAPSED -ge \$TIMEOUT ]; then
+                            echo "✗ Timeout waiting for MariaDB"
+                            docker logs \$CONTAINER_ID
+                            exit 1
+                        fi
                         
                         echo "Test 2: Container logs"
                         docker logs \$CONTAINER_ID | tail -30
                         
-                        echo "Test 3: Check MariaDB is running"
-                        docker exec \$CONTAINER_ID mysqladmin ping -uroot || echo "MariaDB not ready yet..."
-                        sleep 10
-                        docker exec \$CONTAINER_ID mysqladmin ping -uroot
+                        echo "Test 3: MariaDB ping (usando socket corretto)"
+                        docker exec \$CONTAINER_ID mariadb-admin ping -uroot -S /opt/vcnngr/mariadb/tmp/mysql.sock
                         
-                        echo "Test 4: MariaDB version check"
-                        docker exec \$CONTAINER_ID mysql -V
+                        echo "Test 4: MariaDB version"
+                        docker exec \$CONTAINER_ID mariadb -V
                         
-                        echo "Test 5: Test database connection"
-                        docker exec \$CONTAINER_ID mysql -uroot -e "SELECT VERSION();"
+                        echo "Test 5: SQL query"
+                        docker exec \$CONTAINER_ID mariadb -uroot -S /opt/vcnngr/mariadb/tmp/mysql.sock -e "SELECT VERSION();"
                         
-                        echo "Test 6: Verify binary architecture and execution"
-
-                        # Determina quale binario è disponibile
-                        BINARY=\$(docker exec \$CONTAINER_ID sh -c "ls /opt/vcnngr/mariadb/bin/mariadbd 2>/dev/null || echo /opt/vcnngr/mariadb/bin/mysqld")
-                        echo "Using binary: \$BINARY"
-
-                        # Verifica architettura
-                        CONTAINER_ARCH=\$(docker exec \$CONTAINER_ID uname -m)
-                        echo "Container architecture: \$CONTAINER_ARCH"
-
-                        if [ "${params.BUILD_ARCH}" = "arm64" ]; then
-                            [ "\$CONTAINER_ARCH" = "aarch64" ] && \
-                                echo "✓ Container is ARM64" || \
-                                echo "✗ Architecture mismatch"
-                        else
-                            [ "\$CONTAINER_ARCH" = "x86_64" ] && \
-                                echo "✓ Container is AMD64" || \
-                                echo "✗ Architecture mismatch"
-                        fi
-
-                        # Verifica che il binario sia eseguibile
-                        echo "Testing binary execution..."
-                        docker exec \$CONTAINER_ID \$BINARY --version && \
-                            echo "✓ MariaDB binary works on \$CONTAINER_ARCH"
+                        echo "Test 6: Create test database"
+                        docker exec \$CONTAINER_ID mariadb -uroot -S /opt/vcnngr/mariadb/tmp/mysql.sock -e "CREATE DATABASE test_db;"
+                        docker exec \$CONTAINER_ID mariadb -uroot -S /opt/vcnngr/mariadb/tmp/mysql.sock -e "SHOW DATABASES;"
                         
                         # Cleanup
                         docker stop \$CONTAINER_ID
