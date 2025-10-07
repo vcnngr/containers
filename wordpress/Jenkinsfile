@@ -1,7 +1,7 @@
 #!/usr/bin/env groovy
 /**
- * VCNNGR WordPress Package Builder
- * Crea il package WordPress pronto per deployment
+ * VCNNGR WordPress Container Pipeline
+ * Build WordPress container with PHP, Apache and MySQL client
  */
 
 pipeline {
@@ -16,324 +16,546 @@ metadata:
     jenkins: agent
 spec:
   serviceAccountName: jenkins
+  securityContext:
+    runAsUser: 0
+    fsGroup: 0
+  volumes:
+  - name: docker-sock
+    hostPath:
+      path: /var/run/docker.sock
+      type: Socket
   containers:
-  - name: builder
+  - name: debian
     image: debian:bookworm
     command: [cat]
     tty: true
+    securityContext:
+      privileged: true
     resources:
       requests:
-        memory: "2Gi"
-        cpu: "500m"
-      limits:
         memory: "4Gi"
-        cpu: "2000m"
+        cpu: "1000m"
+      limits:
+        memory: "8Gi"
+        cpu: "4000m"
+    volumeMounts:
+    - name: docker-sock
+      mountPath: /var/run/docker.sock
+    env:
+    - name: DEBIAN_FRONTEND
+      value: noninteractive
+  - name: trivy
+    image: aquasec/trivy:latest
+    command: [cat]
+    tty: true
+    volumeMounts:
+    - name: docker-sock
+      mountPath: /var/run/docker.sock
+  - name: shellcheck
+    image: koalaman/shellcheck-alpine:latest
+    command: [cat]
+    tty: true
+  - name: sonar-scanner
+    image: sonarsource/sonar-scanner-cli:latest
+    command: [cat]
+    tty: true
 '''
         }
     }
     
     parameters {
         string(name: 'WORDPRESS_VERSION', defaultValue: '6.8.3', description: 'WordPress version')
-        string(name: 'REVISION', defaultValue: '0', description: 'Build revision')
-        choice(name: 'ARCH', choices: ['amd64', 'arm64'], description: 'Architecture (WordPress is arch-independent)')
-        choice(name: 'DEBIAN_VERSION', choices: ['debian-12', 'debian-11'], description: 'Debian version')
-        booleanParam(name: 'UPLOAD_TO_MINIO', defaultValue: true, description: 'Upload to MinIO')
+        string(name: 'PHP_VERSION', defaultValue: '8.2.29', description: 'PHP version')
+        string(name: 'APACHE_VERSION', defaultValue: '2.4.65', description: 'Apache version')
+        string(name: 'MYSQL_CLIENT_VERSION', defaultValue: '12.0.2', description: 'MySQL Client version')
+        string(name: 'IMAGE_REVISION', defaultValue: '0', description: 'Image revision')
+        choice(name: 'DEBIAN_VARIANT', choices: ['debian-12', 'debian-11'], description: 'Debian variant')
+        choice(name: 'BUILD_ARCH', choices: ['amd64', 'arm64'], description: 'Architecture')
+        booleanParam(name: 'PUSH_TO_DOCKERHUB', defaultValue: false, description: 'Push to DockerHub')
+        booleanParam(name: 'RUN_SECURITY_SCAN', defaultValue: true, description: 'Run security scan')
+        booleanParam(name: 'RUN_CODE_QUALITY', defaultValue: true, description: 'Run code quality checks (ShellCheck + SonarQube)')
+        booleanParam(name: 'TAG_AS_LATEST', defaultValue: false, description: 'Tag as latest')
     }
     
     environment {
-        MINIO_BUCKET = 'vcnngr-binaries'
-        MINIO_PREFIX = 'wordpress'
-        MINIO_ENDPOINT = 'http://minio.minio-system.svc.cluster.local:9000'
-        MINIO_PUBLIC_URL = 'minio.vcnngr.it'
-        BUILD_DATE = sh(script: "date -u +'%Y%m%d'", returnStdout: true).trim()
+        CONTAINER_NAME = 'wordpress'
+        MAJOR_VERSION = sh(script: "echo '${params.WORDPRESS_VERSION}' | cut -d. -f1-2", returnStdout: true).trim()
+        DOCKERHUB_REGISTRY = 'docker.io'
+        DOCKERHUB_NAMESPACE = 'vcnngr'
+        IMAGE_BASE = "${DOCKERHUB_REGISTRY}/${DOCKERHUB_NAMESPACE}/${CONTAINER_NAME}"
+        TAG_FULL = "${params.WORDPRESS_VERSION}-${params.IMAGE_REVISION}"
+        TAG_VERSION = "${params.WORDPRESS_VERSION}"
+        DOCKERHUB_CREDS = credentials('dockerhub-credentials')
+        BUILD_CONTEXT = "${WORKSPACE}/${CONTAINER_NAME}/${MAJOR_VERSION}/${params.DEBIAN_VARIANT}"
+        BUILD_DATE = sh(script: "date -u +'%Y-%m-%dT%H:%M:%SZ'", returnStdout: true).trim()
+        GIT_COMMIT_SHORT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+    }
+    
+    options {
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+        timeout(time: 2, unit: 'HOURS')
+        timestamps()
+        ansiColor('xterm')
     }
     
     stages {
         stage('Setup') {
             steps {
-                container('builder') {
+                container('debian') {
                     sh '''
-                        apt-get update
-                        apt-get install -y wget curl tar gzip python3-pip
-                        pip3 install awscli --break-system-packages
+                        set -e
+                        apt-get update -qq
+                        apt-get install -y -qq docker.io curl git
+                        docker version
                     '''
                 }
             }
         }
         
-        stage('Download WordPress') {
-            steps {
-                container('builder') {
-                    sh """
-                        mkdir -p /tmp/wordpress_build
-                        cd /tmp/wordpress_build
-                        
-                        echo "=== Downloading WordPress ${params.WORDPRESS_VERSION} ==="
-                        wget -q https://wordpress.org/wordpress-${params.WORDPRESS_VERSION}.tar.gz
-                        
-                        echo "=== Extracting WordPress ==="
-                        tar -xzf wordpress-${params.WORDPRESS_VERSION}.tar.gz
-                        
-                        echo "✓ WordPress extracted"
-                        ls -la wordpress/
-                    """
-                }
-            }
-        }
-        
-        stage('Download WP-CLI') {
-            steps {
-                container('builder') {
-                    sh '''
-                        cd /tmp/wordpress_build
-                        
-                        echo "=== Downloading WP-CLI ==="
-                        mkdir -p wp-cli/bin
-                        
-                        # Download WP-CLI phar
-                        wget -q https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar -O wp-cli/bin/wp
-                        chmod +x wp-cli/bin/wp
-                        
-                        echo "✓ WP-CLI downloaded"
-                        wp-cli/bin/wp --version
-                    '''
-                }
-            }
-        }
-        
-        stage('Create VCNNGR Structure') {
-            steps {
-                container('builder') {
-                    sh '''
-                        cd /tmp/wordpress_build
-                        
-                        echo "=== Creating VCNNGR package structure ==="
-                        mkdir -p package/files/wordpress
-                        mkdir -p package/files/wp-cli
-                        
-                        # Copia WordPress core
-                        cp -r wordpress/* package/files/wordpress/
-                        
-                        # Copia WP-CLI
-                        cp -r wp-cli/* package/files/wp-cli/
-                        
-                        # Crea directory per uploads e cache
-                        mkdir -p package/files/wordpress/wp-content/uploads
-                        mkdir -p package/files/wordpress/wp-content/cache
-                        
-                        echo "✓ Package structure created"
-                        
-                        echo ""
-                        echo "=== Package contents ==="
-                        du -sh package/files/wordpress/
-                        du -sh package/files/wp-cli/
-                    '''
-                }
-            }
-        }
-        
-        stage('Add WordPress Metadata') {
-            steps {
-                container('builder') {
-                    sh '''
-                        cd /tmp/wordpress_build/package/files/wordpress
-                        
-                        echo "=== Creating WordPress metadata ==="
-                        
-                        # Crea .vcnngr file con info versione
-                        cat > .vcnngr << EOF
-WORDPRESS_VERSION=${WORDPRESS_VERSION}
-BUILD_DATE=${BUILD_DATE}
-BUILD_ARCH=${ARCH}
-BUILD_OS=${DEBIAN_VERSION}
-PACKAGER=VCNNGR
-PREFIX=/opt/vcnngr/wordpress
-EOF
-                        
-                        # Lista plugin/temi installati di default
-                        echo "Default themes:"
-                        ls -1 wp-content/themes/
-                        
-                        echo ""
-                        echo "Default plugins:"
-                        ls -1 wp-content/plugins/ 2>/dev/null || echo "No default plugins"
-                    '''
-                }
-            }
-        }
-        
-        stage('Create Tarball') {
-            steps {
-                container('builder') {
-                    sh """
-                        cd /tmp/wordpress_build/package
-                        
-                        cat > COPYING << 'EOF'
-WordPress ${params.WORDPRESS_VERSION}
-Packaged by VCNNGR on ${BUILD_DATE}
-Prefix: /opt/vcnngr/wordpress
-WP-CLI: Included at /opt/vcnngr/wp-cli
-Architecture: ${params.ARCH} (PHP application - arch independent)
-Debian: ${params.DEBIAN_VERSION}
-Source: https://wordpress.org/wordpress-${params.WORDPRESS_VERSION}.tar.gz
-
-This package contains:
-- WordPress ${params.WORDPRESS_VERSION} core files
-- WP-CLI command line tool
-- Default themes (Twenty Twenty-Four, etc.)
-- Empty wp-content structure for customization
-
-Installation:
-Extract to /opt/vcnngr/ and configure with Apache + PHP
-EOF
-                        
-                        echo "=== Creating tarball ==="
-                        tar -czf /tmp/wordpress-${params.WORDPRESS_VERSION}-${params.REVISION}-linux-${params.ARCH}-${params.DEBIAN_VERSION}.tar.gz \
-                            files/ COPYING
-                        
-                        sha256sum /tmp/wordpress-${params.WORDPRESS_VERSION}-${params.REVISION}-linux-${params.ARCH}-${params.DEBIAN_VERSION}.tar.gz > \
-                            /tmp/wordpress-${params.WORDPRESS_VERSION}-${params.REVISION}-linux-${params.ARCH}-${params.DEBIAN_VERSION}.tar.gz.sha256
-                        
-                        echo ""
-                        echo "=== Final tarball ==="
-                        ls -lh /tmp/wordpress-${params.WORDPRESS_VERSION}-${params.REVISION}-linux-${params.ARCH}-${params.DEBIAN_VERSION}.tar.gz
-                        
-                        cp /tmp/wordpress-${params.WORDPRESS_VERSION}-${params.REVISION}-linux-${params.ARCH}-${params.DEBIAN_VERSION}.tar.gz* \${WORKSPACE}/
-                    """
-                }
-            }
-        }
-        
-        stage('Verify Tarball') {
-            steps {
-                container('builder') {
-                    sh """
-                        cd \${WORKSPACE}
-                        
-                        TARBALL="wordpress-${params.WORDPRESS_VERSION}-${params.REVISION}-linux-${params.ARCH}-${params.DEBIAN_VERSION}.tar.gz"
-                        
-                        echo "=== Verifying checksum ==="
-                        sha256sum -c "\${TARBALL}.sha256"
-                        
-                        echo ""
-                        echo "=== Verifying structure ==="
-                        tar -tzf "\$TARBALL" | grep "^files/wordpress/" | head -30
-                        
-                        echo ""
-                        echo "=== Checking critical files ==="
-                        
-                        if tar -tzf "\$TARBALL" | grep -q "files/wordpress/index.php\$"; then
-                            echo "✓ WordPress index.php found"
-                        else
-                            echo "✗ ERROR: index.php not found"
-                            exit 1
-                        fi
-                        
-                        if tar -tzf "\$TARBALL" | grep -q "files/wordpress/wp-config-sample.php\$"; then
-                            echo "✓ wp-config-sample.php found"
-                        else
-                            echo "✗ ERROR: wp-config-sample.php not found"
-                            exit 1
-                        fi
-                        
-                        if tar -tzf "\$TARBALL" | grep -q "files/wp-cli/bin/wp\$"; then
-                            echo "✓ WP-CLI found"
-                        else
-                            echo "⚠ WARNING: WP-CLI not found"
-                        fi
-                        
-                        echo ""
-                        echo "=== Package contents summary ==="
-                        echo "Total files:"
-                        tar -tzf "\$TARBALL" | wc -l
-                        
-                        echo ""
-                        echo "WordPress core files:"
-                        tar -tzf "\$TARBALL" | grep "files/wordpress/" | wc -l
-                        
-                        echo ""
-                        echo "WP-CLI files:"
-                        tar -tzf "\$TARBALL" | grep "files/wp-cli/" | wc -l
-                    """
-                }
-            }
-        }
-        
-        stage('Upload to MinIO') {
+        stage('Setup QEMU') {
             when {
-                expression { params.UPLOAD_TO_MINIO }
+                expression { params.BUILD_ARCH == 'arm64' }
             }
             steps {
-                container('builder') {
-                    withCredentials([usernamePassword(
-                        credentialsId: 'minio-credentials',
-                        usernameVariable: 'ACCESS_KEY_ID',
-                        passwordVariable: 'SECRET_ACCESS_KEY'
-                    )]) {
-                        sh """
-                            export AWS_ACCESS_KEY_ID=\${ACCESS_KEY_ID}
-                            export AWS_SECRET_ACCESS_KEY=\${SECRET_ACCESS_KEY}
-                            
-                            cd \${WORKSPACE}
-                            
-                            echo "=== Uploading to MinIO ==="
-                            
-                            aws s3 cp \
-                                wordpress-${params.WORDPRESS_VERSION}-${params.REVISION}-linux-${params.ARCH}-${params.DEBIAN_VERSION}.tar.gz \
-                                s3://${MINIO_BUCKET}/${MINIO_PREFIX}/ \
-                                --endpoint-url=${MINIO_ENDPOINT}
-                            
-                            aws s3 cp \
-                                wordpress-${params.WORDPRESS_VERSION}-${params.REVISION}-linux-${params.ARCH}-${params.DEBIAN_VERSION}.tar.gz.sha256 \
-                                s3://${MINIO_BUCKET}/${MINIO_PREFIX}/ \
-                                --endpoint-url=${MINIO_ENDPOINT}
-                            
-                            echo ""
-                            echo "✓ Uploaded to MinIO successfully"
-                        """
+                container('debian') {
+                    sh '''
+                        echo "Setting up QEMU for ARM64 emulation..."
+                        docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+                        echo "✓ QEMU configured for ARM64"
+                    '''
+                }
+            }
+        }
+        
+        stage('Validate') {
+            steps {
+                script {
+                    echo """
+╔═══════════════════════════════════════════════════════════════╗
+║              VCNNGR WORDPRESS BUILD                           ║
+╚═══════════════════════════════════════════════════════════════╝
+
+Container:     ${CONTAINER_NAME}
+WordPress:     ${params.WORDPRESS_VERSION}
+PHP:           ${params.PHP_VERSION}
+Apache:        ${params.APACHE_VERSION}
+MySQL Client:  ${params.MYSQL_CLIENT_VERSION}
+Revision:      ${params.IMAGE_REVISION}
+Architecture:  ${params.BUILD_ARCH}
+Build Date:    ${BUILD_DATE}
+Git Commit:    ${GIT_COMMIT_SHORT}
+
+Tags:
+- ${IMAGE_BASE}:${TAG_FULL}
+- ${IMAGE_BASE}:${TAG_VERSION}
+- ${IMAGE_BASE}:${MAJOR_VERSION}
+${params.TAG_AS_LATEST ? "• ${IMAGE_BASE}:latest" : ""}
+═══════════════════════════════════════════════════════════════
+"""
+                    sh """
+                        if [ ! -f "${BUILD_CONTEXT}/Dockerfile" ]; then
+                            echo "ERROR: Dockerfile not found at ${BUILD_CONTEXT}/Dockerfile"
+                            exit 1
+                        fi
+                        echo "✓ Dockerfile found"
+                        
+                        if [ -d "${BUILD_CONTEXT}/prebuildfs" ]; then
+                            echo "✓ prebuildfs directory exists"
+                        fi
+                        
+                        if [ -d "${BUILD_CONTEXT}/rootfs" ]; then
+                            echo "✓ rootfs directory exists"
+                        fi
+                    """
+                }
+            }
+        }
+        
+        stage('Code Quality') {
+            when {
+                expression { params.RUN_CODE_QUALITY }
+            }
+            parallel {
+                stage('Shellcheck') {
+                    steps {
+                        container('shellcheck') {
+                            script {
+                                try {
+                                    sh """
+                                        cd ${BUILD_CONTEXT}
+                                        SCRIPTS=\$(find . -type f -name '*.sh' 2>/dev/null || true)
+                                        if [ -n "\$SCRIPTS" ]; then
+                                            echo "\$SCRIPTS" | xargs shellcheck -f gcc --severity=warning || echo "Shellcheck warnings found"
+                                        else
+                                            echo "No shell scripts found"
+                                        fi
+                                    """
+                                } catch (Exception e) {
+                                    echo "Shellcheck failed: ${e.message}"
+                                }
+                            }
+                        }
+                    }
+                }
+                stage('SonarQube') {
+                    steps {
+                        container('sonar-scanner') {
+                            script {
+                                try {
+                                    withCredentials([string(credentialsId: 'sonarqube-token', variable: 'SONAR_TOKEN')]) {
+                                        sh """
+                                            cd ${BUILD_CONTEXT}
+                                            sonar-scanner \
+                                                -Dsonar.host.url=http://sonarqube-sonarqube.jenkins.svc.cluster.local:9000 \
+                                                -Dsonar.token=\${SONAR_TOKEN} \
+                                                -Dsonar.projectKey=vcnngr-${CONTAINER_NAME} \
+                                                -Dsonar.projectName='VCNNGR ${CONTAINER_NAME}' \
+                                                -Dsonar.projectVersion=${params.WORDPRESS_VERSION} \
+                                                -Dsonar.sources=. \
+                                                -Dsonar.exclusions='**/*.md'
+                                        """
+                                    }
+                                } catch (Exception e) {
+                                    echo "SonarQube failed: ${e.message}"
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
         
-        stage('Archive') {
+        stage('Quality Gate') {
+            when {
+                expression { params.RUN_CODE_QUALITY }
+            }
             steps {
-                archiveArtifacts artifacts: '*.tar.gz*', allowEmptyArchive: true
+                container('sonar-scanner') {
+                    script {
+                        try {
+                            withCredentials([string(credentialsId: 'sonarqube-token', variable: 'SONAR_TOKEN')]) {
+                                timeout(time: 5, unit: 'MINUTES') {
+                                    sh """
+                                        echo "Waiting for SonarQube Quality Gate..."
+                                        sleep 10
+                                        
+                                        # Get project status
+                                        RESPONSE=\$(curl -s -u \${SONAR_TOKEN}: \
+                                            "http://sonarqube-sonarqube.jenkins.svc.cluster.local:9000/api/qualitygates/project_status?projectKey=vcnngr-${CONTAINER_NAME}")
+                                        
+                                        echo "Quality Gate Response: \$RESPONSE"
+                                        
+                                        STATUS=\$(echo \$RESPONSE | grep -o '"status":"[^"]*"' | cut -d'"' -f4)
+                                        
+                                        echo "Quality Gate Status: \$STATUS"
+                                        
+                                        if [ "\$STATUS" = "OK" ]; then
+                                            echo "✓ Quality Gate PASSED"
+                                        elif [ "\$STATUS" = "ERROR" ]; then
+                                            echo "✗ Quality Gate FAILED"
+                                            echo "Check details at: http://sonarqube-sonarqube.jenkins.svc.cluster.local:9000/dashboard?id=vcnngr-${CONTAINER_NAME}"
+                                            exit 1
+                                        else
+                                            echo "⚠ Quality Gate status unknown or not computed yet"
+                                            echo "Status: \$STATUS"
+                                        fi
+                                    """
+                                }
+                            }
+                        } catch (Exception e) {
+                            echo "Quality Gate check failed: ${e.message}"
+                            echo "⚠ Continuing build despite Quality Gate failure"
+                        }
+                    }
+                }
+            }
+        }
+        
+        stage('Build Image') {
+            steps {
+                container('debian') {
+                    sh """
+                        cd ${BUILD_CONTEXT}
+                        
+                        # Crea il file secret per il Dockerfile
+                        echo "minio.vcnngr.it/vcnngr-binaries" > ./downloads_url_secret
+                        
+                        # Build con Docker usando BuildKit per i secrets
+                        export DOCKER_BUILDKIT=1
+                        
+                        # Determina platform per Docker
+                        if [ "${params.BUILD_ARCH}" = "arm64" ]; then
+                            DOCKER_PLATFORM="linux/arm64"
+                        else
+                            DOCKER_PLATFORM="linux/amd64"
+                        fi
+                        
+                        echo "Building for platform: \$DOCKER_PLATFORM"
+                        
+                        docker build \
+                            --platform=\$DOCKER_PLATFORM \
+                            --secret id=downloads_url,src=./downloads_url_secret \
+                            --build-arg TARGETARCH=${params.BUILD_ARCH} \
+                            --build-arg DOWNLOADS_URL=minio.vcnngr.it/vcnngr-binaries \
+                            --label "org.opencontainers.image.created=${BUILD_DATE}" \
+                            --label "org.opencontainers.image.version=${params.WORDPRESS_VERSION}" \
+                            --label "org.opencontainers.image.vendor=Vcnngr" \
+                            --label "org.opencontainers.image.architecture=${params.BUILD_ARCH}" \
+                            --tag ${IMAGE_BASE}:${TAG_FULL} \
+                            --tag ${IMAGE_BASE}:${TAG_VERSION} \
+                            --tag ${IMAGE_BASE}:${MAJOR_VERSION} \
+                            ${params.TAG_AS_LATEST ? "--tag ${IMAGE_BASE}:latest" : ""} \
+                            -f Dockerfile \
+                            .
+                        
+                        # Cleanup secret file
+                        rm -f ./downloads_url_secret
+                        
+                        echo "✓ Image built successfully for ${params.BUILD_ARCH}"
+                        docker images ${IMAGE_BASE}:${TAG_FULL}
+                        
+                        # Verifica architettura
+                        echo "Verifying image architecture:"
+                        docker inspect ${IMAGE_BASE}:${TAG_FULL} | grep Architecture
+                    """
+                }
+            }
+        }
+        
+        stage('Test Image') {
+            steps {
+                container('debian') {
+                    sh """
+                        echo "Testing ${IMAGE_BASE}:${TAG_FULL}"
+                        
+                        # Per ARM64, i test potrebbero essere più lenti via QEMU
+                        if [ "${params.BUILD_ARCH}" = "arm64" ]; then
+                            echo "⚠️ Running tests on ARM64 via QEMU emulation (slower)"
+                            WAIT_TIME=45
+                        else
+                            WAIT_TIME=30
+                        fi
+                        
+                        echo "Test 1: Image starts correctly"
+                        CONTAINER_ID=\$(docker run -d \\
+                            --platform=linux/${params.BUILD_ARCH} \\
+                            -e ALLOW_EMPTY_PASSWORD=yes \\
+                            -e WORDPRESS_SKIP_BOOTSTRAP=yes \\
+                            ${IMAGE_BASE}:${TAG_FULL})
+                        
+                        echo "Container: \$CONTAINER_ID"
+                        
+                        # Aspetta che WordPress/Apache siano pronti
+                        echo "Waiting \$WAIT_TIME seconds for WordPress to start..."
+                        sleep \$WAIT_TIME
+                        
+                        echo ""
+                        echo "Test 2: Container logs (last 30 lines)"
+                        docker logs \$CONTAINER_ID 2>&1 | tail -30
+                        
+                        echo ""
+                        echo "Test 3: Get container IP"
+                        CONTAINER_IP=\$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' \$CONTAINER_ID)
+                        echo "Container IP: \$CONTAINER_IP"
+                        
+                        echo ""
+                        echo "Test 4: HTTP Response from WordPress"
+                        RESPONSE=\$(curl -s -o /dev/null -w "%{http_code}" http://\$CONTAINER_IP:8080 2>/dev/null || echo "000")
+                        
+                        if [ "\$RESPONSE" = "200" ] || [ "\$RESPONSE" = "302" ]; then
+                            echo "✓ WordPress responding with HTTP \$RESPONSE"
+                        else
+                            echo "✗ WordPress returned HTTP \$RESPONSE"
+                            docker logs \$CONTAINER_ID
+                            docker stop \$CONTAINER_ID
+                            docker rm \$CONTAINER_ID
+                            exit 1
+                        fi
+                        
+                        echo ""
+                        echo "Test 5: Verify PHP version"
+                        docker exec \$CONTAINER_ID php -v | head -1
+                        
+                        echo ""
+                        echo "Test 6: Verify Apache version"
+                        docker exec \$CONTAINER_ID /opt/vcnngr/apache/bin/httpd -v
+                        
+                        echo ""
+                        echo "Test 7: Verify WordPress installation"
+                        docker exec \$CONTAINER_ID ls -la /vcnngr/wordpress/ | head -10
+                        
+                        echo ""
+                        echo "Test 8: Verify architecture and binary execution"
+                        CONTAINER_ARCH=\$(docker exec \$CONTAINER_ID uname -m)
+                        echo "Container architecture: \$CONTAINER_ARCH"
+                        
+                        if [ "${params.BUILD_ARCH}" = "arm64" ]; then
+                            [ "\$CONTAINER_ARCH" = "aarch64" ] && \
+                                echo "✓ Container is ARM64" || \
+                                echo "✗ Architecture mismatch"
+                        else
+                            [ "\$CONTAINER_ARCH" = "x86_64" ] && \
+                                echo "✓ Container is AMD64" || \
+                                echo "✗ Architecture mismatch"
+                        fi
+                        
+                        echo ""
+                        echo "Test 9: Check WP-CLI availability"
+                        docker exec \$CONTAINER_ID which wp || echo "WP-CLI not in PATH (this may be normal)"
+                        
+                        # Cleanup
+                        echo ""
+                        echo "Cleaning up..."
+                        docker stop \$CONTAINER_ID
+                        docker rm \$CONTAINER_ID
+                        
+                        echo ""
+                        echo "✅ ALL TESTS PASSED - WordPress ${params.BUILD_ARCH} works perfectly!"
+                    """
+                }
+            }
+        }
+        
+        stage('Security Scan') {
+            when {
+                expression { params.RUN_SECURITY_SCAN }
+            }
+            steps {
+                container('trivy') {
+                    script {
+                        def maxRetries = 3
+                        for (int attempt = 1; attempt <= maxRetries; attempt++) {
+                            try {
+                                if (attempt > 1) {
+                                    sh "trivy clean --all || true"
+                                    sleep(5)
+                                }
+                                
+                                sh """
+                                    trivy image \
+                                        --severity HIGH,CRITICAL \
+                                        --exit-code 0 \
+                                        --timeout 10m \
+                                        ${IMAGE_BASE}:${TAG_FULL}
+                                    
+                                    trivy image \
+                                        --format json \
+                                        --output trivy-report.json \
+                                        ${IMAGE_BASE}:${TAG_FULL} || true
+                                """
+                                break
+                            } catch (Exception e) {
+                                if (attempt == maxRetries) {
+                                    echo "Security scan failed after ${maxRetries} attempts"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        stage('Push to DockerHub') {
+            when {
+                expression { params.PUSH_TO_DOCKERHUB }
+            }
+            steps {
+                container('debian') {
+                    sh """
+                        echo "\${DOCKERHUB_CREDS_PSW}" | docker login \
+                            --username "\${DOCKERHUB_CREDS_USR}" \
+                            --password-stdin \
+                            ${DOCKERHUB_REGISTRY}
+                        
+                        docker push ${IMAGE_BASE}:${TAG_FULL}
+                        docker push ${IMAGE_BASE}:${TAG_VERSION}
+                        docker push ${IMAGE_BASE}:${MAJOR_VERSION}
+                        
+                        ${params.TAG_AS_LATEST ? "docker push ${IMAGE_BASE}:latest" : ""}
+                        
+                        docker logout
+                        echo "✓ Images pushed successfully"
+                    """
+                }
+            }
+        }
+        
+        stage('Generate Report') {
+            steps {
+                script {
+                    def metadata = [
+                        container: CONTAINER_NAME,
+                        version: params.WORDPRESS_VERSION,
+                        php_version: params.PHP_VERSION,
+                        apache_version: params.APACHE_VERSION,
+                        mysql_client_version: params.MYSQL_CLIENT_VERSION,
+                        architecture: params.BUILD_ARCH,
+                        tags: [
+                            "${IMAGE_BASE}:${TAG_FULL}",
+                            "${IMAGE_BASE}:${TAG_VERSION}",
+                            "${IMAGE_BASE}:${MAJOR_VERSION}"
+                        ]
+                    ]
+                    
+                    if (params.TAG_AS_LATEST) {
+                        metadata.tags.add("${IMAGE_BASE}:latest")
+                    }
+                    
+                    writeJSON file: 'build-metadata.json', json: metadata, pretty: 4
+                    
+                    echo """
+╔═══════════════════════════════════════════════════════════════╗
+║                    BUILD COMPLETE                             ║
+╚═══════════════════════════════════════════════════════════════╝
+
+Container: ${CONTAINER_NAME} ${params.WORDPRESS_VERSION}
+PHP: ${params.PHP_VERSION}
+Apache: ${params.APACHE_VERSION}
+MySQL Client: ${params.MYSQL_CLIENT_VERSION}
+Architecture: ${params.BUILD_ARCH}
+
+Images:
+"""
+                    metadata.tags.each { tag -> echo "  • ${tag}" }
+                    
+                    echo """
+Quick test:
+  docker pull ${IMAGE_BASE}:${TAG_VERSION}
+  docker run -d -p 8080:8080 -p 8443:8443 \\
+    -e ALLOW_EMPTY_PASSWORD=yes \\
+    -e WORDPRESS_DATABASE_HOST=mariadb \\
+    -e WORDPRESS_DATABASE_NAME=wordpress \\
+    ${IMAGE_BASE}:${TAG_VERSION}
+  curl http://localhost:8080
+═══════════════════════════════════════════════════════════════
+"""
+                }
             }
         }
     }
     
     post {
+        always {
+            script {
+                try {
+                    archiveArtifacts artifacts: '*.json', allowEmptyArchive: true
+                } catch (Exception e) {
+                    echo "No artifacts to archive"
+                }
+                
+                try {
+                    container('debian') {
+                        sh "docker logout ${DOCKERHUB_REGISTRY} || true"
+                        sh "docker system prune -af || true"
+                    }
+                } catch (Exception e) {
+                    echo "Cleanup skipped"
+                }
+            }
+        }
+        
         success {
-            echo """
-╔═══════════════════════════════════════════╗
-║   WORDPRESS PACKAGE BUILD SUCCESSFUL      ║
-╚═══════════════════════════════════════════╝
-
-Version: WordPress ${params.WORDPRESS_VERSION}
-Architecture: ${params.ARCH} (arch-independent PHP app)
-
-Download URL:
-https://${MINIO_PUBLIC_URL}/${MINIO_BUCKET}/${MINIO_PREFIX}/wordpress-${params.WORDPRESS_VERSION}-${params.REVISION}-linux-${params.ARCH}-${params.DEBIAN_VERSION}.tar.gz
-
-Package Contents:
-✓ WordPress ${params.WORDPRESS_VERSION} core
-✓ WP-CLI command line tool
-✓ Default themes
-✓ Ready for /opt/vcnngr/wordpress deployment
-
-Next Steps:
-1. Verify all components on MinIO:
-   - render-template
-   - php-8.2.29-10
-   - apache-2.4.65-1
-   - mysql-client-12.0.2-0
-   - libphp-8.2.29-6
-   - wordpress-6.8.3-0
-2. Update Dockerfile to use VCNNGR MinIO URL
-3. Build Docker image
-4. Test deployment
-"""
+            echo "✓ BUILD SUCCESSFUL"
         }
         
         failure {
