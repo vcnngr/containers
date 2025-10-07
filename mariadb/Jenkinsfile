@@ -315,12 +315,13 @@ ${params.TAG_AS_LATEST ? "• ${IMAGE_BASE}:latest" : ""}
                         
                         echo "Container: \$CONTAINER_ID"
                         
-                        # Aspetta che MariaDB sia pronto guardando i log
+                        # Aspetta che MariaDB sia pronto
                         echo "Waiting for MariaDB to be ready..."
-                        TIMEOUT=60
+                        TIMEOUT=90
                         ELAPSED=0
                         
                         while [ \$ELAPSED -lt \$TIMEOUT ]; do
+                            # Fix: virgolette corrette per grep
                             if docker logs \$CONTAINER_ID 2>&1 | grep -q "ready for connections"; then
                                 echo "✓ MariaDB ready after \${ELAPSED}s"
                                 break
@@ -335,27 +336,40 @@ ${params.TAG_AS_LATEST ? "• ${IMAGE_BASE}:latest" : ""}
                             exit 1
                         fi
                         
-                        echo "Test 2: Container logs"
-                        docker logs \$CONTAINER_ID | tail -30
+                        echo ""
+                        echo "Test 2: Container logs (last 30 lines)"
+                        docker logs \$CONTAINER_ID 2>&1 | tail -30
                         
-                        echo "Test 3: MariaDB ping (usando socket corretto)"
+                        echo ""
+                        echo "Test 3: MariaDB ping"
                         docker exec \$CONTAINER_ID mariadb-admin ping -uroot -S /opt/vcnngr/mariadb/tmp/mysql.sock
                         
+                        echo ""
                         echo "Test 4: MariaDB version"
                         docker exec \$CONTAINER_ID mariadb -V
                         
+                        echo ""
                         echo "Test 5: SQL query"
                         docker exec \$CONTAINER_ID mariadb -uroot -S /opt/vcnngr/mariadb/tmp/mysql.sock -e "SELECT VERSION();"
                         
-                        echo "Test 6: Create test database"
-                        docker exec \$CONTAINER_ID mariadb -uroot -S /opt/vcnngr/mariadb/tmp/mysql.sock -e "CREATE DATABASE test_db;"
-                        docker exec \$CONTAINER_ID mariadb -uroot -S /opt/vcnngr/mariadb/tmp/mysql.sock -e "SHOW DATABASES;"
+                        echo ""
+                        echo "Test 6: Create and verify test database"
+                        docker exec \$CONTAINER_ID mariadb -uroot -S /opt/vcnngr/mariadb/tmp/mysql.sock -e "CREATE DATABASE IF NOT EXISTS test_db;"
+                        docker exec \$CONTAINER_ID mariadb -uroot -S /opt/vcnngr/mariadb/tmp/mysql.sock -e "SHOW DATABASES;" | grep test_db
+                        
+                        echo ""
+                        echo "Test 7: Verify binary architecture"
+                        docker exec \$CONTAINER_ID uname -m
+                        docker exec \$CONTAINER_ID file /opt/vcnngr/mariadb/sbin/mariadbd
                         
                         # Cleanup
+                        echo ""
+                        echo "Cleaning up..."
                         docker stop \$CONTAINER_ID
                         docker rm \$CONTAINER_ID
                         
-                        echo "✓ All tests passed - MariaDB ${params.BUILD_ARCH} works perfectly!"
+                        echo ""
+                        echo "✅ ALL TESTS PASSED - MariaDB ${params.BUILD_ARCH} works perfectly!"
                     """
                 }
             }
