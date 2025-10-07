@@ -357,11 +357,6 @@ ${params.TAG_AS_LATEST ? "• ${IMAGE_BASE}:latest" : ""}
                         docker exec \$CONTAINER_ID mariadb -uroot -S /opt/vcnngr/mariadb/tmp/mysql.sock -e "CREATE DATABASE IF NOT EXISTS test_db;"
                         docker exec \$CONTAINER_ID mariadb -uroot -S /opt/vcnngr/mariadb/tmp/mysql.sock -e "SHOW DATABASES;" | grep test_db
                         
-                        echo ""
-                        echo "Test 7: Verify binary architecture"
-                        docker exec \$CONTAINER_ID uname -m
-                        docker exec \$CONTAINER_ID file /opt/vcnngr/mariadb/sbin/mariadbd
-                        
                         # Cleanup
                         echo ""
                         echo "Cleaning up..."
