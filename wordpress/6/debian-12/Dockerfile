@@ -30,21 +30,22 @@ RUN --mount=type=secret,id=downloads_url \
     DOWNLOADS_URL=${SECRET_DOWNLOADS_URL:-${DOWNLOADS_URL}} ; \
     mkdir -p /tmp/vcnngr/pkg/cache/ ; cd /tmp/vcnngr/pkg/cache/ || exit 1 ; \
     COMPONENTS=( \
-      "render-template-1.0.9-156-linux-${OS_ARCH}-debian-12" \
-      "php-8.2.29-10-linux-${OS_ARCH}-debian-12" \
-      "apache-2.4.65-1-linux-${OS_ARCH}-debian-12" \
-      "mysql-client-12.0.2-0-linux-${OS_ARCH}-debian-12" \
-      "libphp-8.2.29-6-linux-${OS_ARCH}-debian-12" \
-      "wordpress-6.8.3-0-linux-${OS_ARCH}-debian-12" \
+      "render-template/render-template-1.0.9-156-linux-${OS_ARCH}-debian-12" \
+      "php/php-8.2.29-10-linux-${OS_ARCH}-debian-12" \
+      "apache/apache-2.4.65-1-linux-${OS_ARCH}-debian-12" \
+      "mysql-client/mysql-client-12.0.2-0-linux-${OS_ARCH}-debian-12" \
+      "libphp/libphp-8.2.29-6-linux-${OS_ARCH}-debian-12" \
+      "wordpress/wordpress-6.8.3-0-linux-${OS_ARCH}-debian-12" \
     ) ; \
     for COMPONENT in "${COMPONENTS[@]}"; do \
-      if [ ! -f "${COMPONENT}.tar.gz" ]; then \
-        curl -SsLf "https://${DOWNLOADS_URL}/${COMPONENT}.tar.gz" -O ; \
-        curl -SsLf "https://${DOWNLOADS_URL}/${COMPONENT}.tar.gz.sha256" -O ; \
+      COMPONENT_NAME=$(basename "${COMPONENT}") ; \
+      if [ ! -f "${COMPONENT_NAME}.tar.gz" ]; then \
+        curl -SsLf "https://${DOWNLOADS_URL}/${COMPONENT}.tar.gz" -O --output-dir . ; \
+        curl -SsLf "https://${DOWNLOADS_URL}/${COMPONENT}.tar.gz.sha256" -O --output-dir . ; \
       fi ; \
-      sha256sum -c "${COMPONENT}.tar.gz.sha256" ; \
-      tar -zxf "${COMPONENT}.tar.gz" -C /opt/vcnngr --strip-components=2 --no-same-owner ; \
-      rm -rf "${COMPONENT}".tar.gz{,.sha256} ; \
+      sha256sum -c "${COMPONENT_NAME}.tar.gz.sha256" ; \
+      tar -zxf "${COMPONENT_NAME}.tar.gz" -C /opt/vcnngr --strip-components=2 --no-same-owner ; \
+      rm -rf "${COMPONENT_NAME}".tar.gz{,.sha256} ; \
     done
 RUN apt-get update && apt-get upgrade -y && \
     apt-get clean && rm -rf /var/lib/apt/lists /var/cache/apt/archives
