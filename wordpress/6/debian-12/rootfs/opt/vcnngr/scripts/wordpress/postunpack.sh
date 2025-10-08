@@ -84,7 +84,7 @@ cat >"$WP_CLI_CONF_FILE" <<EOF
 # Global parameter defaults
 path: "${VCNNGR_ROOT_DIR}/wordpress"
 EOF
-render-template "${VCNNGR_ROOT_DIR}/scripts/wordpress/bitnami-templates/wp.tpl" >"${WP_CLI_BIN_DIR}/wp"
+render-template "${VCNNGR_ROOT_DIR}/scripts/wordpress/vcnngr-templates/wp.tpl" >"${WP_CLI_BIN_DIR}/wp"
 configure_permissions_ownership "${WP_CLI_BIN_DIR}/wp" -f "755"
 
 # Copy all initially generated configuration files to the default directory
