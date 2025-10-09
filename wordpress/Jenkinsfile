@@ -25,8 +25,8 @@ spec:
       path: /var/run/docker.sock
       type: Socket
   containers:
-  - name: debian
-    image: debian:bookworm
+  - name: docker
+    image: docker:24-cli
     command: [cat]
     tty: true
     securityContext:
@@ -42,8 +42,8 @@ spec:
     - name: docker-sock
       mountPath: /var/run/docker.sock
     env:
-    - name: DEBIAN_FRONTEND
-      value: noninteractive
+    - name: DOCKER_BUILDKIT
+      value: "1"
   - name: trivy
     image: aquasec/trivy:latest
     command: [cat]
@@ -102,12 +102,12 @@ spec:
     stages {
         stage('Setup') {
             steps {
-                container('debian') {
+                container('docker') {
                     sh '''
                         set -e
-                        apt-get update -qq
-                        apt-get install -y -qq docker.io curl git
+                        echo "✓ Using Docker CLI container"
                         docker version
+                        docker buildx version
                     '''
                 }
             }
@@ -118,7 +118,7 @@ spec:
                 expression { params.BUILD_ARCH == 'arm64' }
             }
             steps {
-                container('debian') {
+                container('docker') {
                     sh '''
                         echo "Setting up QEMU for ARM64 emulation..."
                         docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
@@ -274,7 +274,7 @@ ${params.TAG_AS_LATEST ? "• ${IMAGE_BASE}:latest" : ""}
         
         stage('Build Image') {
             steps {
-                container('debian') {
+                container('docker') {
                     sh """
                         cd ${BUILD_CONTEXT}
                         
@@ -325,7 +325,7 @@ ${params.TAG_AS_LATEST ? "• ${IMAGE_BASE}:latest" : ""}
         
         stage('Test Image') {
             steps {
-                container('debian') {
+                container('docker') {
                     sh """
                         echo "Testing ${IMAGE_BASE}:${TAG_FULL}"
                         
@@ -461,7 +461,7 @@ ${params.TAG_AS_LATEST ? "• ${IMAGE_BASE}:latest" : ""}
                 expression { params.PUSH_TO_DOCKERHUB }
             }
             steps {
-                container('debian') {
+                container('docker') {
                     sh """
                         echo "\${DOCKERHUB_CREDS_PSW}" | docker login \
                             --username "\${DOCKERHUB_CREDS_USR}" \
@@ -545,7 +545,7 @@ Quick test:
                 }
                 
                 try {
-                    container('debian') {
+                    container('docker') {
                         sh "docker logout ${DOCKERHUB_REGISTRY} || true"
                         sh "docker system prune -af || true"
                     }
