@@ -23,7 +23,7 @@ CYAN='\033[38;5;6m'
 #########################
 stderr_print() {
     # 'is_boolean_yes' is defined in libvalidations.sh, but depends on this file so we cannot source it
-    local bool="${BITNAMI_QUIET:-false}"
+    local bool="${VCNNGR_QUIET:-false}"
     # comparison is performed without regard to the case of alphabetic characters
     shopt -s nocasematch
     if ! [[ "$bool" = 1 || "$bool" =~ ^(yes|true)$ ]]; then
@@ -39,7 +39,7 @@ stderr_print() {
 #   None
 #########################
 log() {
-    local color_bool="${BITNAMI_COLOR:-true}"
+    local color_bool="${VCNNGR_COLOR:-true}"
     # comparison is performed without regard to the case of alphabetic characters
     shopt -s nocasematch
     if [[ "$color_bool" = 1 || "$color_bool" =~ ^(yes|true)$ ]]; then
@@ -57,7 +57,7 @@ log() {
 #########################
 info() {
     local msg_color=""
-    local color_bool="${BITNAMI_COLOR:-true}"
+    local color_bool="${VCNNGR_COLOR:-true}"
     # comparison is performed without regard to the case of alphabetic characters
     shopt -s nocasematch
     if [[ "$color_bool" = 1 || "$color_bool" =~ ^(yes|true)$ ]];then
@@ -74,7 +74,7 @@ info() {
 #########################
 warn() {
     local msg_color=""
-    local color_bool="${BITNAMI_COLOR:-true}"
+    local color_bool="${VCNNGR_COLOR:-true}"
     # comparison is performed without regard to the case of alphabetic characters
     shopt -s nocasematch
     if [[ "$color_bool" = 1 || "$color_bool" =~ ^(yes|true)$ ]];then
@@ -91,7 +91,7 @@ warn() {
 #########################
 error() {
     local msg_color=""
-    local color_bool="${BITNAMI_COLOR:-true}"
+    local color_bool="${VCNNGR_COLOR:-true}"
     # comparison is performed without regard to the case of alphabetic characters
     shopt -s nocasematch
     if [[ "$color_bool" = 1 || "$color_bool" =~ ^(yes|true)$ ]];then
@@ -110,7 +110,7 @@ error() {
 #########################
 debug() {
     local msg_color=""
-    local color_bool="${BITNAMI_COLOR:-true}"
+    local color_bool="${VCNNGR_COLOR:-true}"
     # comparison is performed without regard to the case of alphabetic characters
     shopt -s nocasematch
     if [[ "$color_bool" = 1 || "$color_bool" =~ ^(yes|true)$ ]] ;then

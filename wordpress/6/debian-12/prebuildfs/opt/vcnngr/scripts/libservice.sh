@@ -238,7 +238,7 @@ remove_logrotate_conf() {
 generate_systemd_conf() {
     local -r service_name="${1:?service name is missing}"
     local -r systemd_units_dir="/etc/systemd/system"
-    local -r service_file="${systemd_units_dir}/bitnami.${service_name}.service"
+    local -r service_file="${systemd_units_dir}/vcnngr.${service_name}.service"
     # Default values
     local name="$service_name"
     local type="forking"
@@ -337,8 +337,8 @@ generate_systemd_conf() {
 
 [Unit]
 Description=Bitnami service for ${name}
-# Starting/stopping the main bitnami service should cause the same effect for this service
-PartOf=bitnami.service
+# Starting/stopping the main vcnngr service should cause the same effect for this service
+PartOf=.service
 
 [Service]
 Type=${type}
@@ -420,7 +420,7 @@ EOF
     cat >> "$service_file" <<EOF
 
 [Install]
-# Enabling/disabling the main bitnami service should cause the same effect for this service
-WantedBy=bitnami.service
+# Enabling/disabling the main vcnngr service should cause the same effect for this service
+WantedBy=vcnngr.service
 EOF
 }

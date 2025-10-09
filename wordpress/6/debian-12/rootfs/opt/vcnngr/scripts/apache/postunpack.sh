@@ -23,7 +23,7 @@ set -o pipefail
 # Returns:
 #   None
 #########################
-apache_setup_vcnngr_config() {
+apache_setup_bitnami_config() {
     local template_dir="${VCNNGR_ROOT_DIR}/scripts/apache/vcnngr-templates"
 
     # Enable Apache modules
@@ -76,7 +76,7 @@ EOF
     apache_configure_http_port "$APACHE_DEFAULT_HTTP_PORT_NUMBER"
     apache_configure_https_port "$APACHE_DEFAULT_HTTPS_PORT_NUMBER"
 
-    # Patch the HTTPoxy vulnerability - see: https://docs.vcnngr.com/general/security/security-2016-07-18/
+    # Patch the HTTPoxy vulnerability - see: https://docs..com/general/security/security-2016-07-18/
     apache_patch_httpoxy_vulnerability
 
     # Remove unnecessary directories that come with the tarball
@@ -84,7 +84,7 @@ EOF
 }
 
 ########################
-# Patches the HTTPoxy vulnerability - see: https://docs.vcnngr.com/general/security/security-2016-07-18/
+# Patches the HTTPoxy vulnerability - see: https://docs..com/general/security/security-2016-07-18/
 # Globals:
 #   APACHE_CONF_FILE
 # Arguments:
@@ -106,7 +106,7 @@ EOF
 # Load Apache environment
 . /opt/vcnngr/scripts/apache-env.sh
 
-apache_setup_vcnngr_config
+apache_setup__config
 
 # Ensure non-root user has write permissions on a set of directories
 chmod g+w "$APACHE_BASE_DIR"

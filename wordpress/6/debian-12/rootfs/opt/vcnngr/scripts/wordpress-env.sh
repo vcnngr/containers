@@ -15,7 +15,7 @@
 . /opt/vcnngr/scripts/liblog.sh
 
 export VCNNGR_ROOT_DIR="/opt/vcnngr"
-export VCNNGR_VOLUME_DIR="/bitnami"
+export VCNNGR_VOLUME_DIR="/vcnngr"
 
 # Logging configuration
 export MODULE="${MODULE:-wordpress}"
@@ -153,7 +153,7 @@ export WORDPRESS_ENABLE_XML_RPC="${WORDPRESS_ENABLE_XML_RPC:-no}" # only used du
 
 # WordPress credentials
 export WORDPRESS_USERNAME="${WORDPRESS_USERNAME:-user}" # only used during the first initialization
-export WORDPRESS_PASSWORD="${WORDPRESS_PASSWORD:-bitnami}" # only used during the first initialization
+export WORDPRESS_PASSWORD="${WORDPRESS_PASSWORD:-}" # only used during the first initialization
 export WORDPRESS_EMAIL="${WORDPRESS_EMAIL:-user@example.com}" # only used during the first initialization
 export WORDPRESS_FIRST_NAME="${WORDPRESS_FIRST_NAME:-UserName}" # only used during the first initialization
 export WORDPRESS_LAST_NAME="${WORDPRESS_LAST_NAME:-LastName}" # only used during the first initialization
@@ -195,7 +195,7 @@ export WORDPRESS_DATABASE_HOST="${WORDPRESS_DATABASE_HOST:-$WORDPRESS_DEFAULT_DA
 WORDPRESS_DATABASE_PORT_NUMBER="${WORDPRESS_DATABASE_PORT_NUMBER:-"${MARIADB_PORT_NUMBER:-}"}"
 export WORDPRESS_DATABASE_PORT_NUMBER="${WORDPRESS_DATABASE_PORT_NUMBER:-3306}" # only used during the first initialization
 WORDPRESS_DATABASE_NAME="${WORDPRESS_DATABASE_NAME:-"${MARIADB_DATABASE_NAME:-}"}"
-export WORDPRESS_DATABASE_NAME="${WORDPRESS_DATABASE_NAME:-bitnami_wordpress}" # only used during the first initialization
+export WORDPRESS_DATABASE_NAME="${WORDPRESS_DATABASE_NAME:-_wordpress}" # only used during the first initialization
 WORDPRESS_DATABASE_USER="${WORDPRESS_DATABASE_USER:-"${MARIADB_DATABASE_USER:-}"}"
 export WORDPRESS_DATABASE_USER="${WORDPRESS_DATABASE_USER:-bn_wordpress}" # only used during the first initialization
 WORDPRESS_DATABASE_PASSWORD="${WORDPRESS_DATABASE_PASSWORD:-"${MARIADB_DATABASE_PASSWORD:-}"}"
