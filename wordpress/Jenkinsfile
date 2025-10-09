@@ -292,7 +292,16 @@ ${params.TAG_AS_LATEST ? "• ${IMAGE_BASE}:latest" : ""}
                         # Crea il file secret (una riga, senza newline finale)
                         printf "minio.vcnngr.it/vcnngr-binaries" > ./downloads_url_secret
                         
-                        echo "📋 Secret content: $(cat ./downloads_url_secret)"
+                        echo "📋 Secret content: \$(cat ./downloads_url_secret)"
+                        
+                        # Determina platform per Docker
+                        if [ "${params.BUILD_ARCH}" = "arm64" ]; then
+                            DOCKER_PLATFORM="linux/arm64"
+                        else
+                            DOCKER_PLATFORM="linux/amd64"
+                        fi
+                        
+                        echo "Building for platform: \$DOCKER_PLATFORM"
                         
                         docker buildx build \
                             --platform=\$DOCKER_PLATFORM \
