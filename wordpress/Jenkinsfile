@@ -147,9 +147,9 @@ Build Date:    ${BUILD_DATE}
 Git Commit:    ${GIT_COMMIT_SHORT}
 
 Tags:
-- ${IMAGE_BASE}:${TAG_FULL}
-- ${IMAGE_BASE}:${TAG_VERSION}
-- ${IMAGE_BASE}:${MAJOR_VERSION}
+• ${IMAGE_BASE}:${TAG_FULL}
+• ${IMAGE_BASE}:${TAG_VERSION}
+• ${IMAGE_BASE}:${MAJOR_VERSION}
 ${params.TAG_AS_LATEST ? "• ${IMAGE_BASE}:latest" : ""}
 ═══════════════════════════════════════════════════════════════
 """
@@ -383,7 +383,7 @@ ${params.TAG_AS_LATEST ? "• ${IMAGE_BASE}:latest" : ""}
                         
                         echo ""
                         echo "Test 7: Verify WordPress installation"
-                        docker exec \$CONTAINER_ID ls -la /vcnngr/wordpress/ | head -10
+                        docker exec \$CONTAINER_ID ls -la /opt/vcnngr/wordpress/ | head -10
                         
                         echo ""
                         echo "Test 8: Verify architecture and binary execution"
