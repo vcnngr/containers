@@ -108,6 +108,12 @@ spec:
                         echo "✓ Using Docker CLI container"
                         docker version
                         docker buildx version
+                        
+                        # Crea builder buildx con BuildKit container
+                        docker buildx create --name vcnngr-builder --driver docker-container --use 2>/dev/null || \
+                        docker buildx use vcnngr-builder || true
+                        
+                        echo "✓ Buildx builder ready"
                     '''
                 }
             }
@@ -293,7 +299,11 @@ ${params.TAG_AS_LATEST ? "• ${IMAGE_BASE}:latest" : ""}
                         
                         echo "Building for platform: \$DOCKER_PLATFORM"
                         
-                        docker build \
+                        # Setup buildx con BuildKit aggiornato
+                        docker buildx create --use --name vcnngr-builder --driver docker-container || true
+                        docker buildx inspect --bootstrap
+                        
+                        docker buildx build \
                             --platform=\$DOCKER_PLATFORM \
                             --secret id=downloads_url,src=./downloads_url_secret \
                             --build-arg TARGETARCH=${params.BUILD_ARCH} \
@@ -306,6 +316,7 @@ ${params.TAG_AS_LATEST ? "• ${IMAGE_BASE}:latest" : ""}
                             --tag ${IMAGE_BASE}:${TAG_VERSION} \
                             --tag ${IMAGE_BASE}:${MAJOR_VERSION} \
                             ${params.TAG_AS_LATEST ? "--tag ${IMAGE_BASE}:latest" : ""} \
+                            --load \
                             -f Dockerfile \
                             .
                         
@@ -547,6 +558,7 @@ Quick test:
                 try {
                     container('docker') {
                         sh "docker logout ${DOCKERHUB_REGISTRY} || true"
+                        sh "docker buildx rm vcnngr-builder || true"
                         sh "docker system prune -af || true"
                     }
                 } catch (Exception e) {
