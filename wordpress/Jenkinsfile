@@ -284,24 +284,15 @@ ${params.TAG_AS_LATEST ? "• ${IMAGE_BASE}:latest" : ""}
                     sh """
                         cd ${BUILD_CONTEXT}
                         
-                        # Crea il file secret per il Dockerfile
-                        echo "minio.vcnngr.it/vcnngr-binaries" > ./downloads_url_secret
-                        
-                        # Build con Docker usando BuildKit per i secrets
-                        export DOCKER_BUILDKIT=1
-                        
-                        # Determina platform per Docker
-                        if [ "${params.BUILD_ARCH}" = "arm64" ]; then
-                            DOCKER_PLATFORM="linux/arm64"
-                        else
-                            DOCKER_PLATFORM="linux/amd64"
-                        fi
-                        
-                        echo "Building for platform: \$DOCKER_PLATFORM"
-                        
                         # Setup buildx con BuildKit aggiornato
-                        docker buildx create --use --name vcnngr-builder --driver docker-container || true
+                        docker buildx create --use --name vcnngr-builder --driver docker-container 2>/dev/null || \
+                        docker buildx use vcnngr-builder
                         docker buildx inspect --bootstrap
+                        
+                        # Crea il file secret (una riga, senza newline finale)
+                        printf "minio.vcnngr.it/vcnngr-binaries" > ./downloads_url_secret
+                        
+                        echo "📋 Secret content: $(cat ./downloads_url_secret)"
                         
                         docker buildx build \
                             --platform=\$DOCKER_PLATFORM \
