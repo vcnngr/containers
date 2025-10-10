@@ -281,11 +281,11 @@ ${params.TAG_AS_LATEST ? "• ${IMAGE_BASE}:latest" : ""}
         stage('Fix Script Permissions') {
             steps {
                 container('docker') {
-                    sh '''
+                    sh """
                         echo "=== Setting execute permissions on scripts ==="
                         
                         if [ -d "rootfs" ]; then
-                            find rootfs -type f -name "*.sh" -exec chmod +x {} \;
+                            find rootfs -type f -name "*.sh" -exec chmod +x {} \\;
                             SCRIPT_COUNT=$(find rootfs -type f -name "*.sh" | wc -l)
                             echo "✓ Set execute permission on $SCRIPT_COUNT scripts"
                             
@@ -296,7 +296,7 @@ ${params.TAG_AS_LATEST ? "• ${IMAGE_BASE}:latest" : ""}
                         else
                             echo "⚠ No rootfs directory found"
                         fi
-                    '''
+                    """
                 }
             }
         }
