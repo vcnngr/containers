@@ -30,7 +30,7 @@ RUN --mount=type=secret,id=downloads_url,env=SECRET_DOWNLOADS_URL \
     mkdir -p /tmp/vcnngr/pkg/cache/ ; cd /tmp/vcnngr/pkg/cache/ || exit 1 ; \
     COMPONENTS=( \
       "render-template-1.0.9-156-linux-${OS_ARCH}-debian-12" \
-      "php-8.2.29-12-linux-${OS_ARCH}-debian-12" \
+      "php-8.2.29-10-linux-${OS_ARCH}-debian-12" \
       "apache-2.4.65-1-linux-${OS_ARCH}-debian-12" \
       "mysql-client-12.0.2-0-linux-${OS_ARCH}-debian-12" \
       "libphp-8.2.29-6-linux-${OS_ARCH}-debian-12" \
