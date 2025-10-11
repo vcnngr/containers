@@ -15,7 +15,7 @@
 . /opt/vcnngr/scripts/liblog.sh
 
 export VCNNGR_ROOT_DIR="/opt/vcnngr"
-export VCNNGR_VOLUME_DIR="/vcnngr"
+export VCNNGR_VOLUME_DIR="/bitnami"
 
 # Logging configuration
 export MODULE="${MODULE:-apache}"

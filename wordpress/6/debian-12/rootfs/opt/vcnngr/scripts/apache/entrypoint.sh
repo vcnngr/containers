@@ -11,7 +11,7 @@ set -o pipefail
 
 # Load libraries
 . /opt/vcnngr/scripts/libapache.sh
-. /opt/vcnngr/scripts/
+. /opt/vcnngr/scripts/libvcnngr.sh
 . /opt/vcnngr/scripts/liblog.sh
 
 # Load Apache environment

@@ -30,12 +30,12 @@ if ! is_dir_empty "$APACHE_DEFAULT_CONF_DIR"; then
     cp -nr "$APACHE_DEFAULT_CONF_DIR"/. "$APACHE_CONF_DIR"
 fi
 # Generate SSL certs (without a passphrase)
-ensure_dir_exists "${APACHE_CONF_DIR}/vcnngr/certs"
-if [[ ! -f "${APACHE_CONF_DIR}/vcnngr/certs/tls.crt" ]]; then
+ensure_dir_exists "${APACHE_CONF_DIR}/bitnami/certs"
+if [[ ! -f "${APACHE_CONF_DIR}/bitnami/certs/tls.crt" ]]; then
     info "Generating sample certificates"
-    SSL_KEY_FILE="${APACHE_CONF_DIR}/vcnngr/certs/tls.key"
-    SSL_CERT_FILE="${APACHE_CONF_DIR}/vcnngr/certs/tls.crt"
-    SSL_CSR_FILE="${APACHE_CONF_DIR}/vcnngr/certs/tls.csr"
+    SSL_KEY_FILE="${APACHE_CONF_DIR}/bitnami/certs/tls.key"
+    SSL_CERT_FILE="${APACHE_CONF_DIR}/bitnami/certs/tls.crt"
+    SSL_CSR_FILE="${APACHE_CONF_DIR}/bitnami/certs/tls.csr"
     SSL_SUBJ="/CN=example.com"
     SSL_EXT="subjectAltName=DNS:example.com,DNS:www.example.com,IP:127.0.0.1"
     rm -f "$SSL_KEY_FILE" "$SSL_CERT_FILE"
@@ -50,8 +50,8 @@ if [[ ! -f "${APACHE_CONF_DIR}/vcnngr/certs/tls.crt" ]]; then
     rm -f "$SSL_CSR_FILE"
 fi
 # Load SSL configuration
-if [[ -f "${APACHE_CONF_DIR}/vcnngr/vcnngr.conf" ]] && [[ -f "${APACHE_CONF_DIR}/vcnngr/vcnngr-ssl.conf" ]]; then
-    ensure_apache_configuration_exists "Include \"${APACHE_CONF_DIR}/vcnngr/vcnngr-ssl.conf\"" "-ssl\.conf" "${APACHE_CONF_DIR}/vcnngr/vcnngr.conf"
+if [[ -f "${APACHE_CONF_DIR}/bitnami/vcnngr.conf" ]] && [[ -f "${APACHE_CONF_DIR}/bitnami/vcnngr-ssl.conf" ]]; then
+    ensure_apache_configuration_exists "Include \"${APACHE_CONF_DIR}/bitnami/vcnngr-ssl.conf\"" "bitnami-ssl\.conf" "${APACHE_CONF_DIR}/bitnami/vcnngr.conf"
 fi
 
 # Copy vhosts files
@@ -62,14 +62,14 @@ fi
 
 # Mount certificate files
 if ! is_dir_empty "${APACHE_BASE_DIR}/certs"; then
-    warn "The directory '${APACHE_BASE_DIR}/certs' was externally mounted. This is a legacy configuration and will be deprecated soon. Please mount certificate files at '/certs' instead. Find an example at: https://github.com/vcnngr/containers/tree/main/vcnngr/apache#using-custom-ssl-certificates"
-    warn "Restoring certificates at '${APACHE_BASE_DIR}/certs' to '${APACHE_CONF_DIR}/vcnngr/certs'"
-    rm -rf "${APACHE_CONF_DIR}/vcnngr/certs"
-    ln -sf "${APACHE_BASE_DIR}/certs" "${APACHE_CONF_DIR}/vcnngr/certs"
+    warn "The directory '${APACHE_BASE_DIR}/certs' was externally mounted. This is a legacy configuration and will be deprecated soon. Please mount certificate files at '/certs' instead. Find an example at: https://github.com/bitnami/containers/tree/main/bitnami/apache#using-custom-ssl-certificates"
+    warn "Restoring certificates at '${APACHE_BASE_DIR}/certs' to '${APACHE_CONF_DIR}/bitnami/certs'"
+    rm -rf "${APACHE_CONF_DIR}/bitnami/certs"
+    ln -sf "${APACHE_BASE_DIR}/certs" "${APACHE_CONF_DIR}/bitnami/certs"
 elif ! is_dir_empty "/certs"; then
     info "Mounting certificates files from '/certs'"
-    rm -rf "${APACHE_CONF_DIR}/vcnngr/certs"
-    ln -sf "/certs" "${APACHE_CONF_DIR}/vcnngr/certs"
+    rm -rf "${APACHE_CONF_DIR}/bitnami/certs"
+    ln -sf "/certs" "${APACHE_CONF_DIR}/bitnami/certs"
 fi
 
 # Mount application files
@@ -80,11 +80,11 @@ if ! is_dir_empty "/app"; then
 fi
 
 # Restore persisted configuration files (deprecated)
-if ! is_dir_empty "/vcnngr/apache/conf"; then
-    warn "The directory '/vcnngr/apache/conf' was externally mounted. This is a legacy configuration and will be deprecated soon. Please mount certificate files at '${APACHE_CONF_DIR}' instead. Find an example at: https://github.com/vcnngr/containers/tree/main/vcnngr/apache#full-configuration"
-    warn "Restoring configuration at '/vcnngr/apache/conf' to '${APACHE_CONF_DIR}'"
+if ! is_dir_empty "/bitnami/apache/conf"; then
+    warn "The directory '/bitnami/apache/conf' was externally mounted. This is a legacy configuration and will be deprecated soon. Please mount certificate files at '${APACHE_CONF_DIR}' instead. Find an example at: https://github.com/bitnami/containers/tree/main/bitnami/apache#full-configuration"
+    warn "Restoring configuration at '/bitnami/apache/conf' to '${APACHE_CONF_DIR}'"
     rm -rf "$APACHE_CONF_DIR"
-    ln -sf "/vcnngr/apache/conf" "$APACHE_CONF_DIR"
+    ln -sf "/bitnami/apache/conf" "$APACHE_CONF_DIR"
 fi
 
 # Update ports in configuration

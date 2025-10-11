@@ -1,7 +1,7 @@
 # Bitnami package for WordPress
 # Based on Bitnami Work
 
-This container is a rebranded version of [Bitnami's excellent work](https://github.com/vcnngr/containers).
+This container is a rebranded version of [Bitnami's excellent work](https://github.com/bitnami/containers).
 All credit for the original packaging goes to Bitnami/Broadcom.
 
 ---
@@ -17,7 +17,7 @@ All credit for the original packaging goes to Bitnami/Broadcom.
 ## TL;DR
 
 ```console
-docker run --name wordpress bitnami/wordpress:latest
+docker run --name wordpress vcnngr/wordpress:latest
 ```
 
 **Warning**: This quick setup is only intended for development environments. You are encouraged to change the insecure default credentials and check out the available configuration options in the [Environment Variables](#environment-variables) section for a more secure deployment.
@@ -28,10 +28,10 @@ Beginning August 28th, 2025, Bitnami will evolve its public catalog to offer a c
 
 - Granting community users access for the first time to security-optimized versions of popular container images.
 - Bitnami will begin deprecating support for non-hardened, Debian-based software images in its free tier and will gradually remove non-latest tags from the public catalog. As a result, community users will have access to a reduced number of hardened images. These images are published only under the “latest” tag and are intended for development purposes
-- Starting August 28th, over two weeks, all existing container images, including older or versioned tags (e.g., 2.50.0, 10.6), will be migrated from the public catalog (docker.io/vcnngr) to the “Bitnami Legacy” repository (docker.io/bitnamilegacy), where they will no longer receive updates.
+- Starting August 28th, over two weeks, all existing container images, including older or versioned tags (e.g., 2.50.0, 10.6), will be migrated from the public catalog (docker.io/bitnami) to the “Bitnami Legacy” repository (docker.io/bitnamilegacy), where they will no longer receive updates.
 - For production workloads and long-term support, users are encouraged to adopt Bitnami Secure Images, which include hardened containers, smaller attack surfaces, CVE transparency (via VEX/KEV), SBOMs, and enterprise support.
 
-These changes aim to improve the security posture of all Bitnami users by promoting best practices for software supply chain integrity and up-to-date deployments. For more details, visit the [Bitnami Secure Images announcement](https://github.com/vcnngr/containers/issues/83267).
+These changes aim to improve the security posture of all Bitnami users by promoting best practices for software supply chain integrity and up-to-date deployments. For more details, visit the [Bitnami Secure Images announcement](https://github.com/bitnami/containers/issues/83267).
 
 ## Why use Bitnami Secure Images?
 
@@ -42,11 +42,11 @@ These changes aim to improve the security posture of all Bitnami users by promot
 - Bitnami containers, virtual machines and cloud images use the same components and configuration approach - making it easy to switch between formats based on your project needs.
 - Hardened images come with attestation signatures (Notation), SBOMs, virus scan reports and other metadata produced in an SLSA-3 compliant software factory.
 
-Only a subset of BSI applications are available for free. Looking to access the entire catalog of applications as well as enterprise support? Try the [commercial edition of Bitnami Secure Images today](https://www.arrow.com/globalecs/uk/products/vcnngr-secure-images/).
+Only a subset of BSI applications are available for free. Looking to access the entire catalog of applications as well as enterprise support? Try the [commercial edition of Bitnami Secure Images today](https://www.arrow.com/globalecs/uk/products/bitnami-secure-images/).
 
 ## How to deploy WordPress in Kubernetes?
 
-Deploying Bitnami applications as Helm Charts is the easiest way to get started with our applications on Kubernetes. Read more about the installation in the [Bitnami WordPress Chart GitHub repository](https://github.com/vcnngr/charts/tree/master/vcnngr/wordpress).
+Deploying Bitnami applications as Helm Charts is the easiest way to get started with our applications on Kubernetes. Read more about the installation in the [Bitnami WordPress Chart GitHub repository](https://github.com/bitnami/charts/tree/master/bitnami/wordpress).
 
 ## Why use a non-root container?
 
@@ -58,33 +58,33 @@ Learn more about the Bitnami tagging policy and the difference between rolling t
 
 You can see the equivalence between the different tags by taking a look at the `tags-info.yaml` file present in the branch folder, i.e `bitnami/ASSET/BRANCH/DISTRO/tags-info.yaml`.
 
-Subscribe to project updates by watching the [bitnami/containers GitHub repo](https://github.com/vcnngr/containers).
+Subscribe to project updates by watching the [bitnami/containers GitHub repo](https://github.com/bitnami/containers).
 
 ## Get this image
 
-The recommended way to get the Bitnami WordPress Docker Image is to pull the prebuilt image from the [Docker Hub Registry](https://hub.docker.com/r/vcnngr/wordpress).
+The recommended way to get the Bitnami WordPress Docker Image is to pull the prebuilt image from the [Docker Hub Registry](https://hub.docker.com/r/bitnami/wordpress).
 
 ```console
-docker pull bitnami/wordpress:latest
+docker pull vcnngr/wordpress:latest
 ```
 
-To use a specific version, you can pull a versioned tag. You can view the [list of available versions](https://hub.docker.com/r/vcnngr/wordpress/tags/) in the Docker Hub Registry.
+To use a specific version, you can pull a versioned tag. You can view the [list of available versions](https://hub.docker.com/r/bitnami/wordpress/tags/) in the Docker Hub Registry.
 
 ```console
-docker pull bitnami/wordpress:[TAG]
+docker pull vcnngr/wordpress:[TAG]
 ```
 
 If you wish, you can also build the image yourself by cloning the repository, changing to the directory containing the Dockerfile and executing the `docker build` command. Remember to replace the `APP`, `VERSION` and `OPERATING-SYSTEM` path placeholders in the example command below with the correct values.
 
 ```console
-git clone https://github.com/vcnngr/containers.git
+git clone https://github.com/bitnami/containers.git
 cd bitnami/APP/VERSION/OPERATING-SYSTEM
 docker build -t bitnami/APP:latest .
 ```
 
 ## How to use this image
 
-WordPress requires access to a MySQL or MariaDB database to store information. We'll use the [Bitnami Docker Image for MariaDB](https://github.com/vcnngr/containers/tree/main/vcnngr/mariadb) for the database requirements.
+WordPress requires access to a MySQL or MariaDB database to store information. We'll use the [Bitnami Docker Image for MariaDB](https://github.com/bitnami/containers/tree/main/bitnami/mariadb) for the database requirements.
 
 ### Using the Docker Command Line
 
@@ -104,8 +104,8 @@ docker run -d --name mariadb \
   --env MARIADB_PASSWORD=bitnami \
   --env MARIADB_DATABASE=bitnami_wordpress \
   --network wordpress-network \
-  --volume mariadb_data:/vcnngr/mariadb \
-  bitnami/mariadb:latest
+  --volume mariadb_data:/bitnami/mariadb \
+  vcnngr/mariadb:latest
 ```
 
 #### Step 3: Create volumes for WordPress persistence and launch the container
@@ -119,8 +119,8 @@ docker run -d --name wordpress \
   --env WORDPRESS_DATABASE_PASSWORD=bitnami \
   --env WORDPRESS_DATABASE_NAME=bitnami_wordpress \
   --network wordpress-network \
-  --volume wordpress_data:/vcnngr/wordpress \
-  bitnami/wordpress:latest
+  --volume wordpress_data:/bitnami/wordpress \
+  vcnngr/wordpress:latest
 ```
 
 Access your application at `http://your-ip/`
@@ -128,19 +128,19 @@ Access your application at `http://your-ip/`
 ### Run the application using Docker Compose
 
 ```console
-curl -sSL https://raw.githubusercontent.com/vcnngr/containers/main/vcnngr/wordpress/docker-compose.yml > docker-compose.yml
+curl -sSL https://raw.githubusercontent.com/bitnami/containers/main/bitnami/wordpress/docker-compose.yml > docker-compose.yml
 docker-compose up -d
 ```
 
-Please be aware this file has not undergone internal testing. Consequently, we advise its use exclusively for development or testing purposes. For production-ready deployments, we highly recommend utilizing its associated [Bitnami Helm chart](https://github.com/vcnngr/charts/tree/main/vcnngr/wordpress).
+Please be aware this file has not undergone internal testing. Consequently, we advise its use exclusively for development or testing purposes. For production-ready deployments, we highly recommend utilizing its associated [Bitnami Helm chart](https://github.com/bitnami/charts/tree/main/bitnami/wordpress).
 
-If you detect any issue in the `docker-compose.yaml` file, feel free to report it or contribute with a fix by following our [Contributing Guidelines](https://github.com/vcnngr/containers/blob/main/CONTRIBUTING.md).
+If you detect any issue in the `docker-compose.yaml` file, feel free to report it or contribute with a fix by following our [Contributing Guidelines](https://github.com/bitnami/containers/blob/main/CONTRIBUTING.md).
 
 ## Persisting your application
 
 If you remove the container all your data will be lost, and the next time you run the image the database will be reinitialized. To avoid this loss of data, you should mount a volume that will persist even after the container is removed.
 
-For persistence you should mount a directory at the `/vcnngr/wordpress` path. If the mounted directory is empty, it will be initialized on the first run. Additionally you should [mount a volume for persistence of the MariaDB data](https://github.com/vcnngr/containers/blob/main/vcnngr/mariadb#persisting-your-database).
+For persistence you should mount a directory at the `/bitnami/wordpress` path. If the mounted directory is empty, it will be initialized on the first run. Additionally you should [mount a volume for persistence of the MariaDB data](https://github.com/bitnami/containers/blob/main/bitnami/mariadb#persisting-your-database).
 
 The above examples define the Docker volumes named `mariadb_data` and `wordpress_data`. The WordPress application state will persist as long as volumes are not removed.
 
@@ -148,20 +148,20 @@ To avoid inadvertent removal of volumes, you can [mount host directories as data
 
 ### Mount host directories as data volumes with Docker Compose
 
-This requires a minor change to the [`docker-compose.yml`](https://github.com/vcnngr/containers/blob/main/vcnngr/wordpress/docker-compose.yml) file present in this repository:
+This requires a minor change to the [`docker-compose.yml`](https://github.com/bitnami/containers/blob/main/bitnami/wordpress/docker-compose.yml) file present in this repository:
 
 ```diff
    mariadb:
      ...
      volumes:
--      - mariadb_data:/vcnngr/mariadb
-+      - /path/to/mariadb-persistence:/vcnngr/mariadb
+-      - mariadb_data:/bitnami/mariadb
++      - /path/to/mariadb-persistence:/bitnami/mariadb
    ...
    wordpress:
      ...
      volumes:
--      - wordpress_data:/vcnngr/wordpress
-+      - /path/to/wordpress-persistence:/vcnngr/wordpress
+-      - wordpress_data:/bitnami/wordpress
++      - /path/to/wordpress-persistence:/bitnami/wordpress
    ...
 -volumes:
 -  mariadb_data:
@@ -189,8 +189,8 @@ docker run -d --name mariadb \
   --env MARIADB_PASSWORD=bitnami \
   --env MARIADB_DATABASE=bitnami_wordpress \
   --network wordpress-network \
-  --volume /path/to/mariadb-persistence:/vcnngr/mariadb \
-  bitnami/mariadb:latest
+  --volume /path/to/mariadb-persistence:/bitnami/mariadb \
+  vcnngr/mariadb:latest
 ```
 
 > NOTE: As this is a non-root container, the mounted files and directories must have the proper permissions for the UID `1001`.
@@ -205,8 +205,8 @@ docker run -d --name wordpress \
   --env WORDPRESS_DATABASE_PASSWORD=bitnami \
   --env WORDPRESS_DATABASE_NAME=bitnami_wordpress \
   --network wordpress-network \
-  --volume /path/to/wordpress-persistence:/vcnngr/wordpress \
-  bitnami/wordpress:latest
+  --volume /path/to/wordpress-persistence:/bitnami/wordpress \
+  vcnngr/wordpress:latest
 ```
 
 > NOTE: As this is a non-root container, the mounted files and directories must have the proper permissions for the UID `1001`.
@@ -294,7 +294,7 @@ docker run -d --name wordpress \
 
 When you start the WordPress image, you can adjust the configuration of the instance by passing one or more environment variables either on the docker-compose file or on the `docker run` command line. Please note that some variables are only considered when the container is started for the first time. If you want to add a new environment variable:
 
-- For docker-compose add the variable name and value under the application section in the [`docker-compose.yml`](https://github.com/vcnngr/containers/blob/main/vcnngr/wordpress/docker-compose.yml) file present in this repository:
+- For docker-compose add the variable name and value under the application section in the [`docker-compose.yml`](https://github.com/bitnami/containers/blob/main/bitnami/wordpress/docker-compose.yml) file present in this repository:
 
     ```yaml
     wordpress:
@@ -310,8 +310,8 @@ When you start the WordPress image, you can adjust the configuration of the inst
     $ docker run -d --name wordpress -p 80:8080 -p 443:8443 \
       --env WORDPRESS_PASSWORD=my_password \
       --network wordpress-tier \
-      --volume /path/to/wordpress-persistence:/vcnngr \
-      bitnami/wordpress:latest
+      --volume /path/to/wordpress-persistence:/bitnami \
+      vcnngr/wordpress:latest
     ```
 
 ### Examples
@@ -320,7 +320,7 @@ When you start the WordPress image, you can adjust the configuration of the inst
 
 This would be an example of SMTP configuration using a Gmail account:
 
-- Modify the [`docker-compose.yml`](https://github.com/vcnngr/containers/blob/main/vcnngr/wordpress/docker-compose.yml) file present in this repository:
+- Modify the [`docker-compose.yml`](https://github.com/bitnami/containers/blob/main/bitnami/wordpress/docker-compose.yml) file present in this repository:
 
     ```yaml
       wordpress:
@@ -347,15 +347,15 @@ This would be an example of SMTP configuration using a Gmail account:
       --env WORDPRESS_SMTP_USER=your_email@gmail.com \
       --env WORDPRESS_SMTP_PASSWORD=your_password \
       --network wordpress-tier \
-      --volume /path/to/wordpress-persistence:/vcnngr \
-      bitnami/wordpress:latest
+      --volume /path/to/wordpress-persistence:/bitnami \
+      vcnngr/wordpress:latest
     ```
 
 #### Connect WordPress container to an existing database
 
 The Bitnami WordPress container supports connecting the WordPress application to an external database. This would be an example of using an external database for WordPress.
 
-- Modify the [`docker-compose.yml`](https://github.com/vcnngr/containers/blob/main/vcnngr/wordpress/docker-compose.yml) file present in this repository:
+- Modify the [`docker-compose.yml`](https://github.com/bitnami/containers/blob/main/bitnami/wordpress/docker-compose.yml) file present in this repository:
 
     ```diff
        wordpress:
@@ -382,15 +382,15 @@ The Bitnami WordPress container supports connecting the WordPress application to
       --env WORDPRESS_DATABASE_NAME=wordpress_db \
       --env WORDPRESS_DATABASE_USER=wordpress_user \
       --env WORDPRESS_DATABASE_PASSWORD=wordpress_password \
-      --volume wordpress_data:/vcnngr/wordpress \
-      bitnami/wordpress:latest
+      --volume wordpress_data:/bitnami/wordpress \
+      vcnngr/wordpress:latest
     ```
 
 In case the database already contains data from a previous WordPress installation, you need to set the variable `WORDPRESS_SKIP_BOOTSTRAP` to `yes`. Otherwise, the container would execute the installation wizard and could modify the existing data in the database. Note that, when setting `WORDPRESS_SKIP_BOOTSTRAP` to `yes`, values for environment variables such as `WORDPRESS_USERNAME`, `WORDPRESS_PASSWORD` or `WORDPRESS_EMAIL` will be ignored. Make sure that, in this imported database, the table prefix matches the one set in `WORDPRESS_TABLE_PREFIX`.
 
 ### FIPS configuration in Bitnami Secure Images
 
-The Bitnami WordPress Docker image from the [Bitnami Secure Images](https://www.arrow.com/globalecs/uk/products/vcnngr-secure-images/) catalog includes extra features and settings to configure the container with FIPS capabilities. You can configure the next environment variables:
+The Bitnami WordPress Docker image from the [Bitnami Secure Images](https://www.arrow.com/globalecs/uk/products/bitnami-secure-images/) catalog includes extra features and settings to configure the container with FIPS capabilities. You can configure the next environment variables:
 
 - `OPENSSL_FIPS`: whether OpenSSL runs in FIPS mode or not. `yes` (default), `no`.
 
@@ -454,7 +454,7 @@ We need to mount two volumes in a container we will use to create the backup: a 
 
 ```console
 docker run --rm -v /path/to/wordpress-backups:/backups --volumes-from wordpress busybox \
-  cp -a /vcnngr/wordpress /backups/latest
+  cp -a /bitnami/wordpress /backups/latest
 ```
 
 ### Restoring a backup
@@ -466,9 +466,9 @@ For the MariaDB database container:
 ```diff
  $ docker run -d --name mariadb \
    ...
--  --volume /path/to/mariadb-persistence:/vcnngr/mariadb \
-+  --volume /path/to/mariadb-backups/latest:/vcnngr/mariadb \
-   bitnami/mariadb:latest
+-  --volume /path/to/mariadb-persistence:/bitnami/mariadb \
++  --volume /path/to/mariadb-backups/latest:/bitnami/mariadb \
+   vcnngr/mariadb:latest
 ```
 
 For the WordPress container:
@@ -476,21 +476,21 @@ For the WordPress container:
 ```diff
  $ docker run -d --name wordpress \
    ...
--  --volume /path/to/wordpress-persistence:/vcnngr/wordpress \
-+  --volume /path/to/wordpress-backups/latest:/vcnngr/wordpress \
-   bitnami/wordpress:latest
+-  --volume /path/to/wordpress-persistence:/bitnami/wordpress \
++  --volume /path/to/wordpress-backups/latest:/bitnami/wordpress \
+   vcnngr/wordpress:latest
 ```
 
 ### Upgrade this image
 
-Bitnami provides up-to-date versions of MariaDB and WordPress, including security patches, soon after they are made upstream. We recommend that you follow these steps to upgrade your container. We will cover here the upgrade of the WordPress container. For the MariaDB upgrade see <https://github.com/vcnngr/containers/tree/main/vcnngr/mariadb#upgrade-this-image>
+Bitnami provides up-to-date versions of MariaDB and WordPress, including security patches, soon after they are made upstream. We recommend that you follow these steps to upgrade your container. We will cover here the upgrade of the WordPress container. For the MariaDB upgrade see <https://github.com/bitnami/containers/tree/main/bitnami/mariadb#upgrade-this-image>
 
-The `bitnami/wordpress:latest` tag always points to the most recent release. To get the most recent release you can simple repull the `latest` tag from the Docker Hub with `docker pull bitnami/wordpress:latest`. However it is recommended to use [tagged versions](https://hub.docker.com/r/vcnngr/wordpress/tags/).
+The `bitnami/wordpress:latest` tag always points to the most recent release. To get the most recent release you can simple repull the `latest` tag from the Docker Hub with `docker pull vcnngr/wordpress:latest`. However it is recommended to use [tagged versions](https://hub.docker.com/r/bitnami/wordpress/tags/).
 
 #### Step 1: Get the updated image
 
 ```console
-docker pull bitnami/wordpress:latest
+docker pull vcnngr/wordpress:latest
 ```
 
 #### Step 2: Stop the running container
@@ -530,9 +530,9 @@ The Bitnami WordPress Docker image is designed to be extended so it can be used 
 Before extending this image, please note there are certain configuration settings you can modify using the original image:
 
 - Settings that can be adapted using environment variables. For instance, you can change the ports used by Apache for HTTP and HTTPS, by setting the environment variables `APACHE_HTTP_PORT_NUMBER` and `APACHE_HTTPS_PORT_NUMBER` respectively.
-- [Adding custom virtual hosts](https://github.com/vcnngr/containers/blob/main/vcnngr/apache#adding-custom-virtual-hosts).
-- [Replacing the 'httpd.conf' file](https://github.com/vcnngr/containers/blob/main/vcnngr/apache#full-configuration).
-- [Using custom SSL certificates](https://github.com/vcnngr/containers/blob/main/vcnngr/apache#using-custom-ssl-certificates).
+- [Adding custom virtual hosts](https://github.com/bitnami/containers/blob/main/bitnami/apache#adding-custom-virtual-hosts).
+- [Replacing the 'httpd.conf' file](https://github.com/bitnami/containers/blob/main/bitnami/apache#full-configuration).
+- [Using custom SSL certificates](https://github.com/bitnami/containers/blob/main/bitnami/apache#using-custom-ssl-certificates).
 
 If your desired customizations cannot be covered using the methods mentioned above, extend the image. To do so, create your own image using a Dockerfile with the format below:
 
@@ -568,7 +568,7 @@ ENV APACHE_HTTPS_PORT_NUMBER=8143
 EXPOSE 8181 8143
 ```
 
-Based on the extended image, you can update the [`docker-compose.yml`](https://github.com/vcnngr/containers/blob/main/vcnngr/wordpress/docker-compose.yml) file present in this repository to add other features:
+Based on the extended image, you can update the [`docker-compose.yml`](https://github.com/bitnami/containers/blob/main/bitnami/wordpress/docker-compose.yml) file present in this repository to add other features:
 
 ```diff
    wordpress:
@@ -612,8 +612,8 @@ Based on the extended image, you can update the [`docker-compose.yml`](https://g
 ### 5.2.1-debian-9-r9 and 5.2.1-ol-7-r9
 
 - This image has been adapted so it's easier to customize. See the [Customize this image](#customize-this-image) section for more information.
-- The Apache configuration volume (`/vcnngr/apache`) has been deprecated, and support for this feature will be dropped in the near future. Until then, the container will enable the Apache configuration from that volume if it exists. By default, and if the configuration volume does not exist, the configuration files will be regenerated each time the container is created. Users wanting to apply custom Apache configuration files are advised to mount a volume for the configuration at `/opt/vcnngr/apache/conf`, or mount specific configuration files individually.
-- The PHP configuration volume (`/vcnngr/php`) has been deprecated, and support for this feature will be dropped in the near future. Until then, the container will enable the PHP configuration from that volume if it exists. By default, and if the configuration volume does not exist, the configuration files will be regenerated each time the container is created. Users wanting to apply custom PHP configuration files are advised to mount a volume for the configuration at `/opt/vcnngr/php/conf`, or mount specific configuration files individually.
+- The Apache configuration volume (`/bitnami/apache`) has been deprecated, and support for this feature will be dropped in the near future. Until then, the container will enable the Apache configuration from that volume if it exists. By default, and if the configuration volume does not exist, the configuration files will be regenerated each time the container is created. Users wanting to apply custom Apache configuration files are advised to mount a volume for the configuration at `/opt/vcnngr/apache/conf`, or mount specific configuration files individually.
+- The PHP configuration volume (`/bitnami/php`) has been deprecated, and support for this feature will be dropped in the near future. Until then, the container will enable the PHP configuration from that volume if it exists. By default, and if the configuration volume does not exist, the configuration files will be regenerated each time the container is created. Users wanting to apply custom PHP configuration files are advised to mount a volume for the configuration at `/opt/vcnngr/php/conf`, or mount specific configuration files individually.
 - Enabling custom Apache certificates by placing them at `/opt/vcnngr/apache/certs` has been deprecated, and support for this functionality will be dropped in the near future. Users wanting to enable custom certificates are advised to mount their certificate files on top of the preconfigured ones at `/certs`.
 
 ### 5.1.1-r28, 5.1.1-rhel-7-r31 and 5.1.1-ol-7-r30
@@ -630,11 +630,11 @@ Based on the extended image, you can update the [`docker-compose.yml`](https://g
 
 ## Contributing
 
-We'd love for you to contribute to this container. You can request new features by creating an [issue](https://github.com/vcnngr/containers/issues) or submitting a [pull request](https://github.com/vcnngr/containers/pulls) with your contribution.
+We'd love for you to contribute to this container. You can request new features by creating an [issue](https://github.com/bitnami/containers/issues) or submitting a [pull request](https://github.com/bitnami/containers/pulls) with your contribution.
 
 ## Issues
 
-If you encountered a problem running this container, you can file an [issue](https://github.com/vcnngr/containers/issues/new/choose). For us to provide better support, be sure to fill the issue template.
+If you encountered a problem running this container, you can file an [issue](https://github.com/bitnami/containers/issues/new/choose). For us to provide better support, be sure to fill the issue template.
 
 ## License
 
