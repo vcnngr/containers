@@ -23,7 +23,7 @@ set -o pipefail
 # Returns:
 #   None
 #########################
-apache_setup_bitnami_config() {
+apache_setup_vcnngr_config() {
     local template_dir="${VCNNGR_ROOT_DIR}/scripts/apache/vcnngr-templates"
 
     # Enable Apache modules
@@ -106,7 +106,7 @@ EOF
 # Load Apache environment
 . /opt/vcnngr/scripts/apache-env.sh
 
-apache_setup__config
+apache_setup_vcnngr_config
 
 # Ensure non-root user has write permissions on a set of directories
 chmod g+w "$APACHE_BASE_DIR"
