@@ -13,7 +13,7 @@ set -o pipefail
 . /opt/vcnngr/scripts/wordpress-env.sh
 
 # Load libraries
-. /opt/vcnngr/scripts/
+. /opt/vcnngr/scripts/libvcnngr.sh
 . /opt/vcnngr/scripts/liblog.sh
 . /opt/vcnngr/scripts/libwebserver.sh
 
