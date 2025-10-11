@@ -31,7 +31,7 @@ fi
 apache_disable_module "mpm_event_module"
 
 # Write Apache configuration
-apache_php_conf_file="${APACHE_CONF_DIR}/bitnami/php.conf"
+apache_php_conf_file="${APACHE_CONF_DIR}/vcnngr/php.conf"
 cat > "$apache_php_conf_file" <<EOF
 AddType application/x-httpd-php .php
 DirectoryIndex index.html index.htm index.php

@@ -115,7 +115,7 @@ is_web_server_running() {
 web_server_start() {
     info "Starting $(web_server_type) in background"
     if [[ "${VCNNGR_SERVICE_MANAGER:-}" = "systemd" ]]; then
-        systemctl start "bitnami.$(web_server_type).service"
+        systemctl start "vcnngr.$(web_server_type).service"
     else
         "${VCNNGR_ROOT_DIR}/scripts/$(web_server_type)/start.sh"
     fi
@@ -133,7 +133,7 @@ web_server_start() {
 web_server_stop() {
     info "Stopping $(web_server_type)"
     if [[ "${VCNNGR_SERVICE_MANAGER:-}" = "systemd" ]]; then
-        systemctl stop "bitnami.$(web_server_type).service"
+        systemctl stop "vcnngr.$(web_server_type).service"
     else
         "${VCNNGR_ROOT_DIR}/scripts/$(web_server_type)/stop.sh"
     fi

@@ -15,7 +15,7 @@
 . /opt/vcnngr/scripts/liblog.sh
 
 export VCNNGR_ROOT_DIR="/opt/vcnngr"
-export VCNNGR_VOLUME_DIR="/bitnami"
+export VCNNGR_VOLUME_DIR="/vcnngr"
 
 # Logging configuration
 export MODULE="${MODULE:-mysql}"

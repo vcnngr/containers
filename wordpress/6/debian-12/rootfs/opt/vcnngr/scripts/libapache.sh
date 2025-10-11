@@ -79,10 +79,10 @@ apache_configure_http_port() {
         echo "$apache_configuration" > "$APACHE_CONF_FILE"
     fi
 
-    if [[ -w "${APACHE_CONF_DIR}/bitnami/vcnngr.conf" ]]; then
-        debug "Configuring port ${port} on file ${APACHE_CONF_DIR}/bitnami/vcnngr.conf"
-        apache_configuration="$(sed -E "$vhost_exp" "${APACHE_CONF_DIR}/bitnami/vcnngr.conf")"
-        echo "$apache_configuration" > "${APACHE_CONF_DIR}/bitnami/vcnngr.conf"
+    if [[ -w "${APACHE_CONF_DIR}/vcnngr/vcnngr.conf" ]]; then
+        debug "Configuring port ${port} on file ${APACHE_CONF_DIR}/vcnngr/vcnngr.conf"
+        apache_configuration="$(sed -E "$vhost_exp" "${APACHE_CONF_DIR}/vcnngr/vcnngr.conf")"
+        echo "$apache_configuration" > "${APACHE_CONF_DIR}/vcnngr/vcnngr.conf"
     fi
 
     if [[ -w "${APACHE_VHOSTS_DIR}/00_status-vhost.conf" ]]; then
@@ -107,10 +107,10 @@ apache_configure_https_port() {
     local -r vhost_exp="s|VirtualHost\s+([^:>]+)(:[0-9]+)|VirtualHost \1:${port}|"
     local apache_configuration
 
-    if [[ -w "${APACHE_CONF_DIR}/bitnami/vcnngr-ssl.conf" ]]; then
-        debug "Configuring port ${port} on file ${APACHE_CONF_DIR}/bitnami/vcnngr-ssl.conf"
-        apache_configuration="$(sed -E -e "$listen_exp" -e "$vhost_exp" "${APACHE_CONF_DIR}/bitnami/vcnngr-ssl.conf")"
-        echo "$apache_configuration" > "${APACHE_CONF_DIR}/bitnami/vcnngr-ssl.conf"
+    if [[ -w "${APACHE_CONF_DIR}/vcnngr/vcnngr-ssl.conf" ]]; then
+        debug "Configuring port ${port} on file ${APACHE_CONF_DIR}/vcnngr/vcnngr-ssl.conf"
+        apache_configuration="$(sed -E -e "$listen_exp" -e "$vhost_exp" "${APACHE_CONF_DIR}/vcnngr/vcnngr-ssl.conf")"
+        echo "$apache_configuration" > "${APACHE_CONF_DIR}/vcnngr/vcnngr-ssl.conf"
     fi
 }
 
@@ -641,7 +641,7 @@ EOF
     local template_name="app"
     [[ -n "$type" && "$type" != "php" ]] && template_name="app-${type}"
     local -r template_dir="${VCNNGR_ROOT_DIR}/scripts/apache/vcnngr-templates"
-    local -r prefix_file="${APACHE_CONF_DIR}/bitnami/${app}.conf"
+    local -r prefix_file="${APACHE_CONF_DIR}/vcnngr/${app}.conf"
     if is_file_writable "$prefix_file"; then
         # Create file with root group write privileges, so it can be modified in non-root containers
         [[ ! -f "$prefix_file" ]] && touch "$prefix_file" && chmod g+rw "$prefix_file"

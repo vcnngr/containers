@@ -9,11 +9,11 @@ ARG TARGETARCH
 
 LABEL org.opencontainers.image.base.name="docker.io/vcnngr/minideb:bookworm" \
       org.opencontainers.image.created="2025-10-07T14:35:21Z" \
-      org.opencontainers.image.description="Application packaged by Vcnngr" \
-      org.opencontainers.image.documentation="https://github.com/bitnami/containers/tree/main/bitnami/wordpress/README.md" \
-      org.opencontainers.image.source="https://github.com/bitnami/containers/tree/main/bitnami/wordpress" \
+      org.opencontainers.image.description="Application packaged by Broadcom, Inc." \
+      org.opencontainers.image.documentation="https://github.com/vcnngr/containers/tree/main/vcnngr/wordpress/README.md" \
+      org.opencontainers.image.source="https://github.com/vcnngr/containers/tree/main/vcnngr/wordpress" \
       org.opencontainers.image.title="wordpress" \
-      org.opencontainers.image.vendor="Vcnngr" \
+      org.opencontainers.image.vendor="Broadcom, Inc." \
       org.opencontainers.image.version="6.8.3"
 
 ENV HOME="/" \

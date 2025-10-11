@@ -232,7 +232,7 @@ wordpress_initialize() {
     # Check if WordPress has already been initialized and persisted in a previous run
     local -r app_name="wordpress"
     if ! is_app_initialized "$app_name" || [[ ! -f "$WORDPRESS_CONF_FILE" ]]; then
-        # Ensure WordPress persisted directories exist (i.e. when a volume has been mounted to /bitnami)
+        # Ensure WordPress persisted directories exist (i.e. when a volume has been mounted to /vcnngr)
         info "Ensuring WordPress directories exist"
         ensure_dir_exists "$WORDPRESS_VOLUME_DIR"
         # Use daemon:root ownership for compatibility when running as a non-root user
@@ -567,7 +567,7 @@ wordpress_disable_pingback() {
 
 /**
  * Disable pingback.ping xmlrpc method to prevent WordPress from participating in DDoS attacks
- * More info at: https://docs.bitnami.com/general/apps/wordpress/troubleshooting/xmlrpc-and-pingback/
+ * More info at: https://docs.vcnngr.com/general/apps/wordpress/troubleshooting/xmlrpc-and-pingback/
  */
 if ( !defined( 'WP_CLI' ) ) {
 	// remove x-pingback HTTP header

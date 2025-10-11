@@ -54,9 +54,9 @@ apache_setup_vcnngr_config() {
     done
 
     # Bitnami customizations
-    ensure_dir_exists "${APACHE_CONF_DIR}/bitnami"
-    render-template "${template_dir}/vcnngr.conf.tpl" > "${APACHE_CONF_DIR}/bitnami/vcnngr.conf"
-    render-template "${template_dir}/vcnngr-ssl.conf.tpl" > "${APACHE_CONF_DIR}/bitnami/vcnngr-ssl.conf"
+    ensure_dir_exists "${APACHE_CONF_DIR}/vcnngr"
+    render-template "${template_dir}/vcnngr.conf.tpl" > "${APACHE_CONF_DIR}/vcnngr/vcnngr.conf"
+    render-template "${template_dir}/vcnngr-ssl.conf.tpl" > "${APACHE_CONF_DIR}/vcnngr/vcnngr-ssl.conf"
 
     # Add new configuration only once, to avoid a second postunpack run breaking Apache
     local apache_conf_add
@@ -67,16 +67,16 @@ TraceEnable Off
 ServerTokens ${APACHE_SERVER_TOKENS}
 Include "${APACHE_CONF_DIR}/deflate.conf"
 IncludeOptional "${APACHE_VHOSTS_DIR}/*.conf"
-Include "${APACHE_CONF_DIR}/bitnami/vcnngr.conf"
+Include "${APACHE_CONF_DIR}/vcnngr/vcnngr.conf"
 EOF
 )"
-    ensure_apache_configuration_exists "$apache_conf_add" "${APACHE_CONF_DIR}/bitnami/vcnngr.conf"
+    ensure_apache_configuration_exists "$apache_conf_add" "${APACHE_CONF_DIR}/vcnngr/vcnngr.conf"
 
     # Configure the default ports since the container is non root by default
     apache_configure_http_port "$APACHE_DEFAULT_HTTP_PORT_NUMBER"
     apache_configure_https_port "$APACHE_DEFAULT_HTTPS_PORT_NUMBER"
 
-    # Patch the HTTPoxy vulnerability - see: https://docs.bitnami.com/general/security/security-2016-07-18/
+    # Patch the HTTPoxy vulnerability - see: https://docs.vcnngr.com/general/security/security-2016-07-18/
     apache_patch_httpoxy_vulnerability
 
     # Remove unnecessary directories that come with the tarball
@@ -84,7 +84,7 @@ EOF
 }
 
 ########################
-# Patches the HTTPoxy vulnerability - see: https://docs.bitnami.com/general/security/security-2016-07-18/
+# Patches the HTTPoxy vulnerability - see: https://docs.vcnngr.com/general/security/security-2016-07-18/
 # Globals:
 #   APACHE_CONF_FILE
 # Arguments:

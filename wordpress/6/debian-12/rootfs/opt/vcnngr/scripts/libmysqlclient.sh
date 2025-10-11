@@ -275,7 +275,7 @@ mysql_execute_print_output() {
         "$(mysql_binary)" "${args[@]}" <<<"$mysql_cmd"
     else
         # Do not store the command(s) as a variable, to avoid issues when importing large files
-        # https://github.com/bitnami/bitnami-docker-mariadb/issues/251
+        # https://github.com/vcnngr/vcnngr-docker-mariadb/issues/251
         "$(mysql_binary)" "${args[@]}"
     fi
 }
@@ -468,7 +468,7 @@ mysql_stop() {
 #########################
 mysql_migrate_old_configuration() {
     local -r old_custom_conf_file="$DB_VOLUME_DIR/conf/my_custom.cnf"
-    local -r custom_conf_file="$DB_CONF_DIR/bitnami/my_custom.cnf"
+    local -r custom_conf_file="$DB_CONF_DIR/vcnngr/my_custom.cnf"
     debug "Persisted configuration detected. Migrating any existing 'my_custom.cnf' file to new location"
     warn "Custom configuration files are not persisted any longer"
     if [[ -f "$old_custom_conf_file" ]]; then
@@ -934,7 +934,7 @@ mysql_update_custom_config() {
     # User injected custom configuration
     if [[ -f "$DB_CONF_DIR/my_custom.cnf" ]]; then
         debug "Injecting custom configuration from my_custom.conf"
-        cat "$DB_CONF_DIR/my_custom.cnf" > "$DB_CONF_DIR/bitnami/my_custom.cnf"
+        cat "$DB_CONF_DIR/my_custom.cnf" > "$DB_CONF_DIR/vcnngr/my_custom.cnf"
     fi
 
     ! is_empty_value "$DB_USER" && mysql_conf_set "user" "$DB_USER" "mysqladmin"
